@@ -11,9 +11,9 @@ import (
 	"time"
 
 	ical "github.com/arran4/golang-ical"
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/joho/godotenv"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/joho/godotenv"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
@@ -134,12 +134,13 @@ func handleWebCalLink(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL 
 	msg := tgbotapi.NewMessage(chatID, "Thank you! You will start receiving daily updates for your lectures.")
 	bot.Send(msg)
 
-	sendWeeklySummary(bot, chatID, webcalURL) // Send initial weekly summary
-	scheduleDailyCheck(bot, db, chatID)       // Schedule daily updates
+	sendWeeklySummary(bot, chatID, webcalURL)     // Send initial weekly summary
+	sendDailySummary(bot, chatID, webcalURL)      // Send initial daily summary
+	scheduleDailySummary(bot, chatID, webcalURL)  // Schedule daily updates
 	scheduleWeeklySummary(bot, chatID, webcalURL) // Schedule weekly summary for Sundays
 }
 
-func scheduleDailyCheck(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64) {
+func scheduleDailySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) {
 	now := time.Now()
 	nextCheck := time.Date(now.Year(), now.Month(), now.Day(), 7, 0, 0, 0, now.Location())
 	if now.After(nextCheck) {
@@ -149,9 +150,9 @@ func scheduleDailyCheck(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64) {
 	durationUntilNextCheck := nextCheck.Sub(now)
 	time.AfterFunc(durationUntilNextCheck, func() {
 		if time.Now().Weekday() != time.Saturday || time.Now().Weekday() != time.Sunday {
-			checkForUpdates(bot, db, chatID)
+			sendDailySummary(bot, chatID, webcalURL)
 		}
-		scheduleDailyCheck(bot, db, chatID)
+		scheduleDailySummary(bot, chatID, webcalURL)
 	})
 }
 
@@ -169,13 +170,19 @@ func scheduleWeeklySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string)
 	})
 }
 
-func checkForUpdates(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64) {
-	webcalURL, err := getUserWebCalURL(db, chatID)
-	if err != nil {
-		log.Println("Error retrieving WebCal URL for chatID:", chatID, err)
-		return
+func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
+	today := time.Now().Add(1000 * time.Hour).Format("20060102")
+	lectures := []*ical.VEvent{}
+	for _, event := range calendar.Events() {
+		start := event.GetProperty("DTSTART").Value
+		if strings.HasPrefix(start, today) {
+			lectures = append(lectures, event)
+		}
 	}
+	return lectures
+}
 
+func sendDailySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) {
 	response, err := http.Get(webcalURL)
 	if err != nil {
 		log.Println("Error fetching calendar for chatID:", chatID, err)
@@ -185,7 +192,7 @@ func checkForUpdates(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64) {
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		log.Println("Error reading response for chatID:", chatID, err)
+		log.Println("Error reading calendar for chatID:", chatID, err)
 		return
 	}
 
@@ -195,16 +202,25 @@ func checkForUpdates(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64) {
 		return
 	}
 
-	today := time.Now().Add(time.Hour).Format("20060102")
-	lecturesToday := getTodaysLectures(calendar, today)
+	lecturesThisDay := getDayLectures(calendar)
+	if len(lecturesThisDay) == 0 {
+		msg := tgbotapi.NewMessage(chatID, "No lectures scheduled for today.")
+		bot.Send(msg)
+		return
+	}
 
-	sendDailySummary(bot, chatID, lecturesToday)
-	scheduleLectureReminders(bot, chatID, lecturesToday)
+	message := "Today's Lectures:\n"
+	for _, lecture := range lecturesThisDay {
+		message += formatEventDetails(lecture) + "\n"
+	}
+
+	msg := tgbotapi.NewMessage(chatID, message)
+	bot.Send(msg)
 }
 
 func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 	lectures := make(map[string][]*ical.VEvent)
-	now := time.Now().Add(time.Hour)
+	now := time.Now().Add(1000 * time.Hour)
 
 	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
 
@@ -256,33 +272,6 @@ func sendWeeklySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) {
 		for _, lecture := range lectures {
 			message += formatEventDetails(lecture) + "\n"
 		}
-	}
-
-	msg := tgbotapi.NewMessage(chatID, message)
-	bot.Send(msg)
-}
-
-func getTodaysLectures(calendar *ical.Calendar, today string) []*ical.VEvent {
-	lectures := []*ical.VEvent{}
-	for _, event := range calendar.Events() {
-		start := event.GetProperty("DTSTART").Value
-		if strings.HasPrefix(start, today) {
-			lectures = append(lectures, event)
-		}
-	}
-	return lectures
-}
-
-func sendDailySummary(bot *tgbotapi.BotAPI, chatID int64, lectures []*ical.VEvent) {
-	if len(lectures) == 0 {
-		msg := tgbotapi.NewMessage(chatID, "No lectures scheduled for today.")
-		bot.Send(msg)
-		return
-	}
-
-	message := "Today's Lectures:\n"
-	for _, lecture := range lectures {
-		message += formatEventDetails(lecture) + "\n"
 	}
 
 	msg := tgbotapi.NewMessage(chatID, message)
