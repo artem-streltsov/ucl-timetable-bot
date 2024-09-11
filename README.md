@@ -1,1 +1,1 @@
-# uni-timetable-telegram-bot
+# UCL timetable bot
