@@ -171,7 +171,7 @@ func scheduleWeeklySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string)
 }
 
 func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
-	today := time.Now().Add(1000 * time.Hour).Format("20060102")
+	today := time.Now().Format("20060102")
 	lectures := []*ical.VEvent{}
 	for _, event := range calendar.Events() {
 		start := event.GetProperty("DTSTART").Value
@@ -220,7 +220,7 @@ func sendDailySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) {
 
 func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 	lectures := make(map[string][]*ical.VEvent)
-	now := time.Now().Add(1000 * time.Hour)
+	now := time.Now()
 
 	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
 
