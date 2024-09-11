@@ -134,7 +134,7 @@ func handleWebCalLink(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL 
 		return
 	}
 
-	msg := tgbotapi.NewMessage(chatID, "Thank you! You will start receiving daily updates for your lectures.")
+	msg := tgbotapi.NewMessage(chatID, "Thank you! You will start receiving daily and weekly updates for your lectures.")
 	bot.Send(msg)
 
 	sendWeeklySummary(bot, chatID, webcalURL)
@@ -213,7 +213,7 @@ func rescheduleNotificationsOnStartup(bot *tgbotapi.BotAPI, db *sql.DB) {
 
 		scheduleDailySummary(bot, db, chatID, webcalURL)
 		scheduleWeeklySummary(bot, db, chatID, webcalURL)
-		log.Printf("Rescheduling for %v %v", chatID, webcalURL)
+		log.Printf("Rescheduling chatID %v %v", chatID, webcalURL)
 	}
 }
 
@@ -268,8 +268,15 @@ func sendDailySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) {
 func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 	lectures := make(map[string][]*ical.VEvent)
 	now := time.Now()
+	offset := int(time.Monday - now.Weekday())
+	if offset > 0 {
+		offset = -6 // If today is Sunday, go back to the previous Monday
+	}
 
-	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+	monday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, offset)
+	friday := monday.AddDate(0, 0, 4).Add(24 * time.Hour)
+
+	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
 
 	for _, event := range calendar.Events() {
 		startTimeStr := event.GetProperty("DTSTART").Value
@@ -278,11 +285,12 @@ func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 			continue
 		}
 
-		if startTime.After(now) && startTime.Before(now.Add(7*24*time.Hour)) {
-			weekday := daysOfWeek[int(startTime.Weekday())]
+		if startTime.After(monday) && startTime.Before(friday) {
+			weekday := daysOfWeek[int(startTime.Weekday())-1]
 			lectures[weekday] = append(lectures[weekday], event)
 		}
 	}
+
 	return lectures
 }
 
@@ -345,7 +353,7 @@ func scheduleLectureReminders(bot *tgbotapi.BotAPI, chatID int64, lectures []*ic
 }
 
 func sendReminder(bot *tgbotapi.BotAPI, chatID int64, lecture *ical.VEvent) {
-	message := "Reminder: Your lecture is starting in 15 minutes!\n"
+	message := fmt.Sprintf("Reminder: Your lecture is starting in %v minutes!\n", reminderOffset)
 	message += formatEventDetails(lecture)
 	msg := tgbotapi.NewMessage(chatID, message)
 	bot.Send(msg)
