@@ -49,6 +49,7 @@ func main() {
 	u.Timeout = 60
 
 	updates := bot.GetUpdatesChan(u)
+	rescheduleNotificationsOnStartup(bot, db)
 
 	for update := range updates {
 		if update.Message == nil {
@@ -77,7 +78,9 @@ func initDB() (*sql.DB, error) {
 	createTableSQL := `
 	CREATE TABLE IF NOT EXISTS users (
 		chatID INTEGER PRIMARY KEY,
-		webcalURL TEXT
+		webcalURL TEXT,
+		lastDailySent DATETIME,
+		lastWeeklySent DATETIME
 	);
 	`
 	_, err = db.Exec(createTableSQL)
@@ -134,13 +137,19 @@ func handleWebCalLink(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL 
 	msg := tgbotapi.NewMessage(chatID, "Thank you! You will start receiving daily updates for your lectures.")
 	bot.Send(msg)
 
-	sendWeeklySummary(bot, chatID, webcalURL)     // Send initial weekly summary
-	sendDailySummary(bot, chatID, webcalURL)      // Send initial daily summary
-	scheduleDailySummary(bot, chatID, webcalURL)  // Schedule daily updates
-	scheduleWeeklySummary(bot, chatID, webcalURL) // Schedule weekly summary for Sundays
+	sendWeeklySummary(bot, chatID, webcalURL)
+	sendDailySummary(bot, chatID, webcalURL)
+	scheduleDailySummary(bot, db, chatID, webcalURL)
+	scheduleWeeklySummary(bot, db, chatID, webcalURL)
 }
 
-func scheduleDailySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) {
+func scheduleDailySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL string) {
+	var lastDailySent sql.NullTime
+	err := db.QueryRow("SELECT lastDailySent FROM users WHERE chatID = ?", chatID).Scan(&lastDailySent)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("Error fetching lastDailySent: %v", err)
+	}
+
 	now := time.Now()
 	nextCheck := time.Date(now.Year(), now.Month(), now.Day(), 7, 0, 0, 0, now.Location())
 	if now.After(nextCheck) {
@@ -149,14 +158,23 @@ func scheduleDailySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) 
 
 	durationUntilNextCheck := nextCheck.Sub(now)
 	time.AfterFunc(durationUntilNextCheck, func() {
-		if time.Now().Weekday() != time.Saturday || time.Now().Weekday() != time.Sunday {
-			sendDailySummary(bot, chatID, webcalURL)
+		sendDailySummary(bot, chatID, webcalURL)
+		_, err := db.Exec("UPDATE users SET lastDailySent = ? WHERE chatID = ?", time.Now(), chatID)
+		if err != nil {
+			log.Printf("Error updating lastDailySent: %v", err)
 		}
-		scheduleDailySummary(bot, chatID, webcalURL)
+
+		scheduleDailySummary(bot, db, chatID, webcalURL)
 	})
 }
 
-func scheduleWeeklySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) {
+func scheduleWeeklySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL string) {
+	var lastWeeklySent sql.NullTime
+	err := db.QueryRow("SELECT lastWeeklySent FROM users WHERE chatID = ?", chatID).Scan(&lastWeeklySent)
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("Error fetching lastWeeklySent: %v", err)
+	}
+
 	now := time.Now()
 	nextSunday := time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, now.Location())
 	for nextSunday.Weekday() != time.Sunday {
@@ -166,8 +184,37 @@ func scheduleWeeklySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string)
 	durationUntilNextSunday := nextSunday.Sub(now)
 	time.AfterFunc(durationUntilNextSunday, func() {
 		sendWeeklySummary(bot, chatID, webcalURL)
-		scheduleWeeklySummary(bot, chatID, webcalURL)
+		_, err := db.Exec("UPDATE users SET lastWeeklySent = ? WHERE chatID = ?", time.Now(), chatID)
+		if err != nil {
+			log.Printf("Error updating lastWeeklySent: %v", err)
+		}
+
+		scheduleWeeklySummary(bot, db, chatID, webcalURL)
 	})
+}
+
+func rescheduleNotificationsOnStartup(bot *tgbotapi.BotAPI, db *sql.DB) {
+	rows, err := db.Query("SELECT chatID, webcalURL, lastDailySent, lastWeeklySent FROM users")
+	if err != nil {
+		log.Fatalf("Error fetching users from database: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var chatID int64
+		var webcalURL string
+		var lastDailySent, lastWeeklySent sql.NullTime
+
+		err = rows.Scan(&chatID, &webcalURL, &lastDailySent, &lastWeeklySent)
+		if err != nil {
+			log.Printf("Error scanning user data: %v", err)
+			continue
+		}
+
+		scheduleDailySummary(bot, db, chatID, webcalURL)
+		scheduleWeeklySummary(bot, db, chatID, webcalURL)
+		log.Printf("Rescheduling for %v %v", chatID, webcalURL)
+	}
 }
 
 func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
