@@ -111,7 +111,7 @@ func getUserWebCalURL(db *sql.DB, chatID int64) (string, error) {
 }
 
 func handleStartCommand(bot *tgbotapi.BotAPI, chatID int64) {
-	msg := tgbotapi.NewMessage(chatID, "Welcome! Please provide the link to your WebCal link to subscribe to your lecture timetable.")
+	msg := tgbotapi.NewMessage(chatID, "Welcome! Please provide the link to your WebCal link to subscribe to your lecture timetable. WebCal link can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy the WebCal URL")
 	bot.Send(msg)
 }
 
