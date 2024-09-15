@@ -18,9 +18,19 @@ import (
 
 const (
 	reminderOffset = 15 * time.Minute
+	dbFile         = "user_data.db"
 )
 
-const dbFile = "user_data.db"
+func parseTimeUTC(timeStr string) (time.Time, error) {
+	if timeStr == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339, timeStr)
+}
+
+func currentTimeUTC() time.Time {
+	return time.Now().UTC()
+}
 
 func main() {
 	err := godotenv.Load()
@@ -100,18 +110,8 @@ func insertUser(db *sql.DB, chatID int64, webcalURL string) error {
 	return err
 }
 
-func getUserWebCalURL(db *sql.DB, chatID int64) (string, error) {
-	var webcalURL string
-	query := "SELECT webcalURL FROM users WHERE chatID = ?"
-	err := db.QueryRow(query, chatID).Scan(&webcalURL)
-	if err != nil {
-		return "", err
-	}
-	return webcalURL, nil
-}
-
 func handleStartCommand(bot *tgbotapi.BotAPI, chatID int64) {
-	msg := tgbotapi.NewMessage(chatID, "Welcome! Please provide the link to your WebCal link to subscribe to your lecture timetable. WebCal link can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy the WebCal URL")
+	msg := tgbotapi.NewMessage(chatID, "Welcome! Please provide your WebCal link to subscribe to your lecture timetable.")
 	bot.Send(msg)
 }
 
@@ -119,7 +119,7 @@ func handleWebCalLink(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL 
 	webcalURL = strings.ToLower(webcalURL)
 
 	if !strings.HasPrefix(webcalURL, "webcal://") {
-		msg := tgbotapi.NewMessage(chatID, "Invalid link! Please provide a valid WebCal link that starts with 'webcal://' or 'Webcal://'.")
+		msg := tgbotapi.NewMessage(chatID, "Invalid link! Please provide a valid WebCal link that starts with 'webcal://'.")
 		bot.Send(msg)
 		return
 	}
@@ -138,8 +138,7 @@ func handleWebCalLink(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL 
 	bot.Send(msg)
 
 	sendWeeklySummary(bot, chatID, webcalURL)
-
-	if time.Now().Weekday() != time.Sunday {
+	if time.Now().UTC().Weekday() != time.Sunday || time.Now().UTC().Weekday() != time.Saturday {
 		sendDailySummary(bot, chatID, webcalURL)
 	}
 
@@ -155,33 +154,32 @@ func scheduleDailySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcal
 		return
 	}
 
-    var lastDailySent time.Time
-    lastDailySent, err = time.Parse(time.RFC3339, lastDailySentStr)
-    if err != nil {
-        log.Printf("Error parsing lastDailySent time: %v", err)
-        return
-    }
+	lastDailySent, err := parseTimeUTC(lastDailySentStr)
+	if err != nil {
+		log.Printf("Error parsing lastDailySent time: %v", err)
+		return
+	}
 
-	now := time.Now()
+	now := currentTimeUTC()
 
 	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
 		return
 	}
 
-	nextCheck := time.Date(now.Year(), now.Month(), now.Day(), 7, 0, 0, 0, now.Location())
+	nextCheck := time.Date(now.Year(), now.Month(), now.Day(), 7, 0, 0, 0, time.UTC)
 	if now.After(nextCheck) {
 		nextCheck = nextCheck.Add(24 * time.Hour)
 	}
 
-    if lastDailySent.After(nextCheck.AddDate(0, 0, -1)) {
-        log.Printf("Daily summary already sent today for chatID: %d", chatID)
-        return
-    }
+	if lastDailySent.After(nextCheck.AddDate(0, 0, -1)) {
+		log.Printf("Daily summary already sent today for chatID: %d", chatID)
+		return
+	}
 
 	durationUntilNextCheck := nextCheck.Sub(now)
 	time.AfterFunc(durationUntilNextCheck, func() {
 		sendDailySummary(bot, chatID, webcalURL)
-		_, err := db.Exec("UPDATE users SET lastDailySent = ? WHERE chatID = ?", time.Now().UTC().Format(time.RFC3339), chatID)
+		_, err := db.Exec("UPDATE users SET lastDailySent = ? WHERE chatID = ?", currentTimeUTC().Format(time.RFC3339), chatID)
 		if err != nil {
 			log.Printf("Error updating lastDailySent: %v", err)
 		}
@@ -191,37 +189,34 @@ func scheduleDailySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcal
 }
 
 func scheduleWeeklySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL string) {
-    var lastWeeklySentStr string
+	var lastWeeklySentStr string
 	err := db.QueryRow("SELECT lastWeeklySent FROM users WHERE chatID = ?", chatID).Scan(&lastWeeklySentStr)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("Error fetching lastWeeklySent: %v", err)
 		return
 	}
 
-    var lastWeeklySent time.Time
-    if lastWeeklySentStr != "" {
-        lastWeeklySent, err = time.Parse(time.RFC3339, lastWeeklySentStr)
-        if err != nil {
-            log.Printf("Error parsing lastWeeklySent time: %v", err)
-            return
-        }
-    }
+	lastWeeklySent, err := parseTimeUTC(lastWeeklySentStr)
+	if err != nil {
+		log.Printf("Error parsing lastWeeklySent time: %v", err)
+		return
+	}
 
-	now := time.Now()
-	nextSunday := time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, now.Location())
+	now := currentTimeUTC()
+	nextSunday := time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, time.UTC)
 	for nextSunday.Weekday() != time.Sunday {
 		nextSunday = nextSunday.Add(24 * time.Hour)
 	}
 
-    if lastWeeklySent.After(nextSunday.AddDate(0, 0, -7)) {
-        log.Printf("Weekly summary already sent this week for chatID: %d", chatID)
-        return
-    }
+	if lastWeeklySent.After(nextSunday.AddDate(0, 0, -7)) {
+		log.Printf("Weekly summary already sent this week for chatID: %d", chatID)
+		return
+	}
 
 	durationUntilNextSunday := nextSunday.Sub(now)
 	time.AfterFunc(durationUntilNextSunday, func() {
 		sendWeeklySummary(bot, chatID, webcalURL)
-		_, err := db.Exec("UPDATE users SET lastWeeklySent = ? WHERE chatID = ?", time.Now().UTC().Format(time.RFC3339), chatID)
+		_, err := db.Exec("UPDATE users SET lastWeeklySent = ? WHERE chatID = ?", currentTimeUTC().Format(time.RFC3339), chatID)
 		if err != nil {
 			log.Printf("Error updating lastWeeklySent: %v", err)
 		}
@@ -240,8 +235,8 @@ func rescheduleNotificationsOnStartup(bot *tgbotapi.BotAPI, db *sql.DB) {
 	for rows.Next() {
 		var chatID int64
 		var webcalURL string
-        var lastDailySentStr, lastWeeklySentStr string
-        var lastDailySent, lastWeeklySent time.Time
+		var lastDailySentStr, lastWeeklySentStr string
+		var lastDailySent, lastWeeklySent time.Time
 
 		err = rows.Scan(&chatID, &webcalURL, &lastDailySentStr, &lastWeeklySentStr)
 		if err != nil {
@@ -249,31 +244,27 @@ func rescheduleNotificationsOnStartup(bot *tgbotapi.BotAPI, db *sql.DB) {
 			continue
 		}
 
-        if lastDailySentStr != "" {
-            lastDailySent, err = time.Parse(time.RFC3339, lastDailySentStr)
-            if err != nil {
-                log.Printf("Error parsing lastDailySent: %v", err)
-                continue
-            }
-        }
+		lastDailySent, err = parseTimeUTC(lastDailySentStr)
+		if err != nil {
+			log.Printf("Error parsing lastDailySent: %v", err)
+			continue
+		}
 
-        if lastWeeklySentStr != "" {
-            lastWeeklySent, err = time.Parse(time.RFC3339, lastWeeklySentStr)
-            if err != nil {
-                log.Printf("Error parsing lastWeeklySent: %v", err)
-                continue
-            }
-        }
+		lastWeeklySent, err = parseTimeUTC(lastWeeklySentStr)
+		if err != nil {
+			log.Printf("Error parsing lastWeeklySent: %v", err)
+			continue
+		}
 
-		now := time.Now()
+		now := currentTimeUTC()
 
-        if lastDailySent.IsZero() || lastDailySent.Before(now.AddDate(0, 0, -1)) {
-            sendDailySummary(bot, chatID, webcalURL)
-        }
+		if lastDailySent.IsZero() || lastDailySent.Before(now.AddDate(0, 0, -1)) {
+			sendDailySummary(bot, chatID, webcalURL)
+		}
 
-        if lastWeeklySent.IsZero() || lastWeeklySent.Before(now.AddDate(0, 0, -7)) {
-            sendWeeklySummary(bot, chatID, webcalURL)
-        }
+		if lastWeeklySent.IsZero() || lastWeeklySent.Before(now.AddDate(0, 0, -7)) {
+			sendWeeklySummary(bot, chatID, webcalURL)
+		}
 
 		scheduleDailySummary(bot, db, chatID, webcalURL)
 		scheduleWeeklySummary(bot, db, chatID, webcalURL)
@@ -282,7 +273,7 @@ func rescheduleNotificationsOnStartup(bot *tgbotapi.BotAPI, db *sql.DB) {
 }
 
 func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
-	today := time.Now().Format("20060102")
+	today := currentTimeUTC().Format("20060102")
 	lectures := []*ical.VEvent{}
 	for _, event := range calendar.Events() {
 		start := event.GetProperty("DTSTART").Value
@@ -331,13 +322,13 @@ func sendDailySummary(bot *tgbotapi.BotAPI, chatID int64, webcalURL string) {
 
 func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 	lectures := make(map[string][]*ical.VEvent)
-	now := time.Now()
+	now := currentTimeUTC()
 	offset := int(time.Monday - now.Weekday())
 	if offset > 0 {
-		offset = -6 // If today is Sunday, go back to the previous Monday
+		offset = -6 // Go back to previous Monday if today is Sunday
 	}
 
-	monday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, offset)
+	monday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, offset)
 	friday := monday.AddDate(0, 0, 4).Add(24 * time.Hour)
 
 	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
