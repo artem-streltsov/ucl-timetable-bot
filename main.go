@@ -241,30 +241,32 @@ func rescheduleNotificationsOnStartup(bot *tgbotapi.BotAPI, db *sql.DB) {
 		err = rows.Scan(&chatID, &webcalURL, &lastDailySentStr, &lastWeeklySentStr)
 		if err != nil {
 			log.Printf("Error scanning user data: %v", err)
-			continue
-		}
+            continue
+        }
 
-		lastDailySent, err = parseTimeUTC(lastDailySentStr)
-		if err != nil {
-			log.Printf("Error parsing lastDailySent: %v", err)
-			continue
-		}
+        now := currentTimeUTC()
+        
+        if lastDailySentStr != "" {
+            lastDailySent, err = parseTimeUTC(lastDailySentStr)
+            if err != nil {
+                log.Printf("Error parsing lastDailySent: %v", err)
+                continue
+            }
+            if lastDailySent.Before(now.AddDate(0, 0, -1)) {
+                sendDailySummary(bot, chatID, webcalURL)
+            }
+        }
 
-		lastWeeklySent, err = parseTimeUTC(lastWeeklySentStr)
-		if err != nil {
-			log.Printf("Error parsing lastWeeklySent: %v", err)
-			continue
-		}
-
-		now := currentTimeUTC()
-
-		if lastDailySent.IsZero() || lastDailySent.Before(now.AddDate(0, 0, -1)) {
-			sendDailySummary(bot, chatID, webcalURL)
-		}
-
-		if lastWeeklySent.IsZero() || lastWeeklySent.Before(now.AddDate(0, 0, -7)) {
-			sendWeeklySummary(bot, chatID, webcalURL)
-		}
+        if lastWeeklySentStr != "" {
+            lastWeeklySent, err = parseTimeUTC(lastWeeklySentStr)
+            if err != nil {
+                log.Printf("Error parsing lastWeeklySent: %v", err)
+                continue
+            }
+            if lastWeeklySent.Before(now.AddDate(0, 0, -7)) {
+                sendWeeklySummary(bot, chatID, webcalURL)
+            }
+        }
 
 		scheduleDailySummary(bot, db, chatID, webcalURL)
 		scheduleWeeklySummary(bot, db, chatID, webcalURL)
