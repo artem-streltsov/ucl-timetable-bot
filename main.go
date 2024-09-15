@@ -148,12 +148,18 @@ func scheduleDailySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcal
 	err := db.QueryRow("SELECT lastDailySent FROM users WHERE chatID = ?", chatID).Scan(&lastDailySent)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("Error fetching lastDailySent: %v", err)
+		return
 	}
 
 	now := time.Now()
 	nextCheck := time.Date(now.Year(), now.Month(), now.Day(), 7, 0, 0, 0, now.Location())
 	if now.After(nextCheck) {
 		nextCheck = nextCheck.Add(24 * time.Hour)
+	}
+
+	if lastDailySent.Valid && lastDailySent.Time.After(nextCheck.AddDate(0, 0, -1)) {
+		log.Printf("Daily summary already sent this week for chatID: %d", chatID)
+		return
 	}
 
 	durationUntilNextCheck := nextCheck.Sub(now)
@@ -173,12 +179,18 @@ func scheduleWeeklySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webca
 	err := db.QueryRow("SELECT lastWeeklySent FROM users WHERE chatID = ?", chatID).Scan(&lastWeeklySent)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("Error fetching lastWeeklySent: %v", err)
+		return
 	}
 
 	now := time.Now()
 	nextSunday := time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, now.Location())
 	for nextSunday.Weekday() != time.Sunday {
 		nextSunday = nextSunday.Add(24 * time.Hour)
+	}
+
+	if lastWeeklySent.Valid && lastWeeklySent.Time.After(nextSunday.AddDate(0, 0, -7)) {
+		log.Printf("Weekly summary already sent this week for chatID: %d", chatID)
+		return
 	}
 
 	durationUntilNextSunday := nextSunday.Sub(now)
