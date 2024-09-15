@@ -138,7 +138,11 @@ func handleWebCalLink(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL 
 	bot.Send(msg)
 
 	sendWeeklySummary(bot, chatID, webcalURL)
-	sendDailySummary(bot, chatID, webcalURL)
+
+	if time.Now().Weekday() != time.Sunday {
+		sendDailySummary(bot, chatID, webcalURL)
+	}
+
 	scheduleDailySummary(bot, db, chatID, webcalURL)
 	scheduleWeeklySummary(bot, db, chatID, webcalURL)
 }
@@ -153,9 +157,9 @@ func scheduleDailySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcal
 
 	now := time.Now()
 
-    if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
-        return
-    }
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return
+	}
 
 	nextCheck := time.Date(now.Year(), now.Month(), now.Day(), 7, 0, 0, 0, now.Location())
 	if now.After(nextCheck) {
@@ -228,15 +232,15 @@ func rescheduleNotificationsOnStartup(bot *tgbotapi.BotAPI, db *sql.DB) {
 			continue
 		}
 
-        now := time.Now()
+		now := time.Now()
 
-        if !lastDailySent.Valid || lastDailySent.Time.Before(now.AddDate(0, 0, -1)) {
-            sendDailySummary(bot, chatID, webcalURL)
-        }
+		if !lastDailySent.Valid || lastDailySent.Time.Before(now.AddDate(0, 0, -1)) {
+			sendDailySummary(bot, chatID, webcalURL)
+		}
 
-        if !lastWeeklySent.Valid || lastWeeklySent.Time.Before(now.AddDate(0, 0, -7)) {
-            sendWeeklySummary(bot, chatID, webcalURL)
-        }
+		if !lastWeeklySent.Valid || lastWeeklySent.Time.Before(now.AddDate(0, 0, -7)) {
+			sendWeeklySummary(bot, chatID, webcalURL)
+		}
 
 		scheduleDailySummary(bot, db, chatID, webcalURL)
 		scheduleWeeklySummary(bot, db, chatID, webcalURL)
