@@ -1,4 +1,4 @@
-module uni-timetable-telegram-bot
+module ucl-timetable-bot
 
 go 1.22.4
 
