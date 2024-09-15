@@ -41,7 +41,7 @@ func main() {
 
 	bot, err := tgbotapi.NewBotAPI(telegramToken)
 	if err != nil {
-		log.Panic(err)
+		log.Fatalf("Failed to initialize bot: %v", err)
 	}
 
 	bot.Debug = false
