@@ -148,12 +148,19 @@ func handleWebCalLink(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL 
 }
 
 func scheduleDailySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL string) {
-	var lastDailySent sql.NullTime
-	err := db.QueryRow("SELECT lastDailySent FROM users WHERE chatID = ?", chatID).Scan(&lastDailySent)
+	var lastDailySentStr string
+	err := db.QueryRow("SELECT lastDailySent FROM users WHERE chatID = ?", chatID).Scan(&lastDailySentStr)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("Error fetching lastDailySent: %v", err)
 		return
 	}
+
+    var lastDailySent time.Time
+    lastDailySent, err = time.Parse(time.RFC3339, lastDailySentStr)
+    if err != nil {
+        log.Printf("Error parsing lastDailySent time: %v", err)
+        return
+    }
 
 	now := time.Now()
 
@@ -166,15 +173,15 @@ func scheduleDailySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcal
 		nextCheck = nextCheck.Add(24 * time.Hour)
 	}
 
-	if lastDailySent.Valid && lastDailySent.Time.After(nextCheck.AddDate(0, 0, -1)) {
-		log.Printf("Daily summary already sent this week for chatID: %d", chatID)
-		return
-	}
+    if lastDailySent.After(nextCheck.AddDate(0, 0, -1)) {
+        log.Printf("Daily summary already sent today for chatID: %d", chatID)
+        return
+    }
 
 	durationUntilNextCheck := nextCheck.Sub(now)
 	time.AfterFunc(durationUntilNextCheck, func() {
 		sendDailySummary(bot, chatID, webcalURL)
-		_, err := db.Exec("UPDATE users SET lastDailySent = ? WHERE chatID = ?", time.Now(), chatID)
+		_, err := db.Exec("UPDATE users SET lastDailySent = ? WHERE chatID = ?", time.Now().UTC().Format(time.RFC3339), chatID)
 		if err != nil {
 			log.Printf("Error updating lastDailySent: %v", err)
 		}
@@ -184,12 +191,21 @@ func scheduleDailySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcal
 }
 
 func scheduleWeeklySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webcalURL string) {
-	var lastWeeklySent sql.NullTime
-	err := db.QueryRow("SELECT lastWeeklySent FROM users WHERE chatID = ?", chatID).Scan(&lastWeeklySent)
+    var lastWeeklySentStr string
+	err := db.QueryRow("SELECT lastWeeklySent FROM users WHERE chatID = ?", chatID).Scan(&lastWeeklySentStr)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("Error fetching lastWeeklySent: %v", err)
 		return
 	}
+
+    var lastWeeklySent time.Time
+    if lastWeeklySentStr != "" {
+        lastWeeklySent, err = time.Parse(time.RFC3339, lastWeeklySentStr)
+        if err != nil {
+            log.Printf("Error parsing lastWeeklySent time: %v", err)
+            return
+        }
+    }
 
 	now := time.Now()
 	nextSunday := time.Date(now.Year(), now.Month(), now.Day(), 18, 0, 0, 0, now.Location())
@@ -197,15 +213,15 @@ func scheduleWeeklySummary(bot *tgbotapi.BotAPI, db *sql.DB, chatID int64, webca
 		nextSunday = nextSunday.Add(24 * time.Hour)
 	}
 
-	if lastWeeklySent.Valid && lastWeeklySent.Time.After(nextSunday.AddDate(0, 0, -7)) {
-		log.Printf("Weekly summary already sent this week for chatID: %d", chatID)
-		return
-	}
+    if lastWeeklySent.After(nextSunday.AddDate(0, 0, -7)) {
+        log.Printf("Weekly summary already sent this week for chatID: %d", chatID)
+        return
+    }
 
 	durationUntilNextSunday := nextSunday.Sub(now)
 	time.AfterFunc(durationUntilNextSunday, func() {
 		sendWeeklySummary(bot, chatID, webcalURL)
-		_, err := db.Exec("UPDATE users SET lastWeeklySent = ? WHERE chatID = ?", time.Now(), chatID)
+		_, err := db.Exec("UPDATE users SET lastWeeklySent = ? WHERE chatID = ?", time.Now().UTC().Format(time.RFC3339), chatID)
 		if err != nil {
 			log.Printf("Error updating lastWeeklySent: %v", err)
 		}
@@ -224,23 +240,40 @@ func rescheduleNotificationsOnStartup(bot *tgbotapi.BotAPI, db *sql.DB) {
 	for rows.Next() {
 		var chatID int64
 		var webcalURL string
-		var lastDailySent, lastWeeklySent sql.NullTime
+        var lastDailySentStr, lastWeeklySentStr string
+        var lastDailySent, lastWeeklySent time.Time
 
-		err = rows.Scan(&chatID, &webcalURL, &lastDailySent, &lastWeeklySent)
+		err = rows.Scan(&chatID, &webcalURL, &lastDailySentStr, &lastWeeklySentStr)
 		if err != nil {
 			log.Printf("Error scanning user data: %v", err)
 			continue
 		}
 
+        if lastDailySentStr != "" {
+            lastDailySent, err = time.Parse(time.RFC3339, lastDailySentStr)
+            if err != nil {
+                log.Printf("Error parsing lastDailySent: %v", err)
+                continue
+            }
+        }
+
+        if lastWeeklySentStr != "" {
+            lastWeeklySent, err = time.Parse(time.RFC3339, lastWeeklySentStr)
+            if err != nil {
+                log.Printf("Error parsing lastWeeklySent: %v", err)
+                continue
+            }
+        }
+
 		now := time.Now()
 
-		if !lastDailySent.Valid || lastDailySent.Time.Before(now.AddDate(0, 0, -1)) {
-			sendDailySummary(bot, chatID, webcalURL)
-		}
+        if lastDailySent.IsZero() || lastDailySent.Before(now.AddDate(0, 0, -1)) {
+            sendDailySummary(bot, chatID, webcalURL)
+        }
 
-		if !lastWeeklySent.Valid || lastWeeklySent.Time.Before(now.AddDate(0, 0, -7)) {
-			sendWeeklySummary(bot, chatID, webcalURL)
-		}
+        if lastWeeklySent.IsZero() || lastWeeklySent.Before(now.AddDate(0, 0, -7)) {
+            sendWeeklySummary(bot, chatID, webcalURL)
+        }
 
 		scheduleDailySummary(bot, db, chatID, webcalURL)
 		scheduleWeeklySummary(bot, db, chatID, webcalURL)
