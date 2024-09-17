@@ -7,7 +7,6 @@ import (
 
 	"github.com/artem-streltsov/ucl-timetable-bot/common"
 	"github.com/artem-streltsov/ucl-timetable-bot/handlers"
-	"github.com/artem-streltsov/ucl-timetable-bot/notifications"
 	"github.com/artem-streltsov/ucl-timetable-bot/scheduler"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )

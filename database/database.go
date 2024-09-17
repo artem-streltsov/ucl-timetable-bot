@@ -58,7 +58,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 }
 
 func InsertUser(db *sql.DB, chatID int64, webcalURL string) error {
-	insertSQL := `INSERT INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent) VALUES (?, ?, NULL, NULL)`
+	insertSQL := `INSERT OR REPLACE INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent) VALUES (?, ?, NULL, NULL)`
 	stmt, err := db.Prepare(insertSQL)
 	if err != nil {
 		return fmt.Errorf("failed to prepare insert statement: %w", err)
