@@ -72,7 +72,7 @@ func InsertUser(db *sql.DB, chatID int64, webcalURL string) error {
 	return nil
 }
 
-func GetWebCalLink(db *sql.DB, chatID int64) (string, error) {
+func GetWebCalURL(db *sql.DB, chatID int64) (string, error) {
 	query := `SELECT webcalURL FROM users WHERE chatID = ?`
 	stmt, err := db.Prepare(query)
 	if err != nil {

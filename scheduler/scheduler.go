@@ -106,6 +106,7 @@ func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalUR
 	})
 }
 
+// TODO: only reschedule the last one
 func RescheduleNotificationsOnStartup(bot common.BotAPI, db *sql.DB) error {
 	rows, err := db.Query("SELECT chatID, webcalURL, lastDailySent, lastWeeklySent FROM users")
 	if err != nil {

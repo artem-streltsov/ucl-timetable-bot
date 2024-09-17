@@ -13,7 +13,7 @@ import (
 )
 
 func HandleStartCommand(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Welcome! Please provide your WebCal link to subscribe to your lecture timetable.")
+	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable.")
 	bot.Send(msg)
 }
 
@@ -67,4 +67,36 @@ func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 
 	SendNotifications(bot, chatID, validWebCalURL)
 	ScheduleNotifications(bot, db, chatID, validWebCalURL)
+}
+
+func HandleTodayCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
+    webCalURL, err := database.GetWebCalURL(db, chatID)
+    if err != nil {
+
+    }
+
+    if webCalURL == "" {
+		msg := bot.NewMessage(chatID, "Error finding your WebCal link.")
+        bot.Send(msg)
+        HandleStartCommand(bot, chatID)
+        return
+    }
+
+    notifications.SendDailySummary(bot, chatID, webCalURL)
+}
+
+func HandleWeekCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
+    webCalURL, err := database.GetWebCalURL(db, chatID)
+    if err != nil {
+
+    }
+
+    if webCalURL == "" {
+		msg := bot.NewMessage(chatID, "Error finding your WebCal link.")
+        bot.Send(msg)
+        HandleStartCommand(bot, chatID)
+        return
+    }
+
+    notifications.SendWeeklySummary(bot, chatID, webCalURL)
 }

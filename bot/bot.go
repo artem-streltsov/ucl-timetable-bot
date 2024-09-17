@@ -57,6 +57,10 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) {
 				switch update.Message.Command() {
 				case "start":
 					handlers.HandleStartCommand(b.api, chatID)
+				case "today":
+					handlers.HandleTodayCommand(b.api, db, chatID)
+				case "week":
+					handlers.HandleWeekCommand(b.api, db, chatID)
 				}
 			} else if update.Message.Text != "" {
 				handlers.HandleWebCalLink(b.api, db, chatID, update.Message.Text)
