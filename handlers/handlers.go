@@ -162,7 +162,7 @@ func HandleSettingsCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
 		"To update your settings, use the following commands:\n"+
 		"/set_daily_time HH:MM\n"+
 		"/set_weekly_time DAY HH:MM (e.g., SUN 18:00)\n"+
-		"/set_reminder_offset MINUTES",
+		"/set_reminder_offset MM",
 		dailyNotificationTime, weeklyNotificationTime, reminderOffset)
 
 	msg := bot.NewMessage(chatID, settingsMessage)

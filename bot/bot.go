@@ -93,7 +93,7 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 }
 
 func setDefaultPreferences(db *sql.DB, chatID int64) error {
-	dailyTime := "18:00"
+	dailyTime := "07:00"
 	weeklyTime := "SUN 18:00"
 	reminderOffset := 30
 
