@@ -14,17 +14,7 @@ import (
 )
 
 func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
-	lastDailySentTime, err := database.GetLastDailySentTime(db, chatID)
-	if err != nil {
-		return fmt.Errorf("error fetching lastDailySent: %w", err)
-	}
-
 	now := utils.CurrentTimeUTC()
-	if !ShouldSendDailySummary(lastDailySentTime, now) {
-		log.Printf("Daily summary already sent today for chatID: %d", chatID)
-		return nil
-	}
-
 	nextDaily := GetNextDailySummaryTime(now)
 	durationUntilNextDaily := nextDaily.Sub(now)
 
@@ -44,19 +34,10 @@ func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL
 }
 
 func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
-	lastWeeklySentTime, err := database.GetLastWeeklySentTime(db, chatID)
-	if err != nil {
-		return fmt.Errorf("error fetching lastWeeklySent: %w", err)
-	}
-
 	now := utils.CurrentTimeUTC()
 	nextSunday := GetNextSunday(now)
-	if !ShouldSendWeeklySummary(lastWeeklySentTime, nextSunday) {
-		log.Printf("Weekly summary already sent this week for chatID: %d", chatID)
-		return nil
-	}
-
 	durationUntilNextSunday := nextSunday.Sub(now)
+
 	time.AfterFunc(durationUntilNextSunday, func() {
 		if err := notifications.SendWeeklySummary(bot, chatID, webcalURL); err != nil {
 			log.Printf("Error sending weekly summary: %v", err)
@@ -130,14 +111,6 @@ func GetNextSunday(now time.Time) time.Time {
 		nextSunday = nextSunday.Add(24 * time.Hour)
 	}
 	return nextSunday
-}
-
-func ShouldSendDailySummary(lastSentTime, now time.Time) bool {
-	return lastSentTime.Before(now.AddDate(0, 0, -1).Add(5 * time.Minute))
-}
-
-func ShouldSendWeeklySummary(lastSentTime, nextSunday time.Time) bool {
-	return lastSentTime.Before(nextSunday.AddDate(0, 0, -7).Add(5 * time.Minute))
 }
 
 func ParseLectureStartTime(lecture *ical.VEvent) (time.Time, error) {

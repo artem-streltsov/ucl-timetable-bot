@@ -65,61 +65,6 @@ func TestGetNextSunday(t *testing.T) {
 	}
 }
 
-func TestShouldSendDailySummary(t *testing.T) {
-	now := time.Now()
-	testCases := []struct {
-		name         string
-		lastSentTime time.Time
-		expected     bool
-	}{
-		{
-			name:         "Should send",
-			lastSentTime: now.Add(-25 * time.Hour),
-			expected:     true,
-		},
-		{
-			name:         "Should not send",
-			lastSentTime: now.Add(-23 * time.Hour),
-			expected:     false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := scheduler.ShouldSendDailySummary(tc.lastSentTime, now)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
-func TestShouldSendWeeklySummary(t *testing.T) {
-	now := time.Now()
-	nextSunday := scheduler.GetNextSunday(now)
-	testCases := []struct {
-		name         string
-		lastSentTime time.Time
-		expected     bool
-	}{
-		{
-			name:         "Should send",
-			lastSentTime: nextSunday.Add(-8 * 24 * time.Hour),
-			expected:     true,
-		},
-		{
-			name:         "Should not send",
-			lastSentTime: nextSunday.Add(-6 * 24 * time.Hour),
-			expected:     false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := scheduler.ShouldSendWeeklySummary(tc.lastSentTime, nextSunday)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
 func TestScheduleDailySummary(t *testing.T) {
 	db, err := sql.Open("sqlite3", ":memory:")
 	assert.NoError(t, err)
