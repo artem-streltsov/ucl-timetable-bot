@@ -72,6 +72,10 @@ func GetNextNotificationTime(now time.Time, dailyTime, weeklyTime string) time.T
 }
 
 func getNextDailyTime(now time.Time, dailyTime string) time.Time {
+	if now.IsZero() {
+		now = time.Now()
+	}
+
 	timeParts := strings.Split(dailyTime, ":")
 	hour, _ := time.Parse("15", timeParts[0])
 	minute, _ := time.Parse("04", timeParts[1])
@@ -84,6 +88,10 @@ func getNextDailyTime(now time.Time, dailyTime string) time.Time {
 }
 
 func getNextWeeklyTime(now time.Time, weeklyTime string) time.Time {
+	if now.IsZero() {
+		now = time.Now()
+	}
+
 	parts := strings.Split(weeklyTime, " ")
 	dayStr, timeStr := parts[0], parts[1]
 	timeParts := strings.Split(timeStr, ":")
