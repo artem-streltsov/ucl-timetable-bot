@@ -72,10 +72,19 @@ func TestScheduleDailySummary(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME, dailyNotificationTime TEXT, weeklyNotificationTime TEXT, reminderOffset INTEGER)`)
+	_, err = db.Exec(`CREATE TABLE users (
+		chatID INTEGER PRIMARY KEY,
+		webcalURL TEXT,
+		lastDailySent DATETIME,
+		lastWeeklySent DATETIME,
+		dailyNotificationTime TEXT DEFAULT '18:00',
+		weeklyNotificationTime TEXT DEFAULT 'SUN 18:00',
+		reminderOffset INTEGER DEFAULT 30
+	)`)
 	assert.NoError(t, err)
 
-	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL, dailyNotificationTime) VALUES (?, ?, ?)`, 123456, "https://example.com/calendar", "18:00")
+	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL, dailyNotificationTime, weeklyNotificationTime, reminderOffset)
+		VALUES (?, ?, ?, ?, ?)`, 123456, "https://example.com/calendar", "18:00", "SUN 18:00", 30)
 	assert.NoError(t, err)
 
 	mockBot := new(MockBotAPI)
@@ -91,10 +100,19 @@ func TestScheduleWeeklySummary(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME, dailyNotificationTime TEXT, weeklyNotificationTime TEXT, reminderOffset INTEGER)`)
+	_, err = db.Exec(`CREATE TABLE users (
+		chatID INTEGER PRIMARY KEY,
+		webcalURL TEXT,
+		lastDailySent DATETIME,
+		lastWeeklySent DATETIME,
+		dailyNotificationTime TEXT DEFAULT '18:00',
+		weeklyNotificationTime TEXT DEFAULT 'SUN 18:00',
+		reminderOffset INTEGER DEFAULT 30
+	)`)
 	assert.NoError(t, err)
 
-	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL, weeklyNotificationTime) VALUES (?, ?, ?)`, 123456, "https://example.com/calendar", "SUN 18:00")
+	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL, dailyNotificationTime, weeklyNotificationTime, reminderOffset)
+		VALUES (?, ?, ?, ?, ?)`, 123456, "https://example.com/calendar", "18:00", "SUN 18:00", 30)
 	assert.NoError(t, err)
 
 	mockBot := new(MockBotAPI)
