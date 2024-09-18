@@ -90,15 +90,21 @@ func RescheduleNotificationsOnStartup(bot common.BotAPI, db *sql.DB) error {
 func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User) error {
 	now := utils.CurrentTimeUTC()
 
-	if user.LastDailySent.Before(now.AddDate(0, 0, -1).Add(5 * time.Minute)) {
-		if err := notifications.SendDailySummary(bot, user.ChatID, user.WebcalURL); err != nil {
-			log.Printf("Error sending daily summary for chatID %d: %v", user.ChatID, err)
+	if user.LastWeeklySent.Before(now.AddDate(0, 0, -7).Add(5 * time.Minute)) {
+		if err := notifications.SendWeeklySummary(bot, user.ChatID, user.WebcalURL); err != nil {
+			return fmt.Errorf("Error sending weekly summary for chatID %d: %v", user.ChatID, err)
+		}
+		if err := database.UpdateLastDailySent(db, user.ChatID, utils.CurrentTimeUTC()); err != nil {
+			return fmt.Errorf("Error updating lastDailySent: %v", err)
 		}
 	}
 
-	if user.LastWeeklySent.Before(now.AddDate(0, 0, -7).Add(5 * time.Minute)) {
-		if err := notifications.SendWeeklySummary(bot, user.ChatID, user.WebcalURL); err != nil {
-			log.Printf("Error sending weekly summary for chatID %d: %v", user.ChatID, err)
+	if user.LastDailySent.Before(now.AddDate(0, 0, -1).Add(5 * time.Minute)) {
+		if err := notifications.SendDailySummary(bot, user.ChatID, user.WebcalURL); err != nil {
+			return fmt.Errorf("Error sending daily summary for chatID %d: %v", user.ChatID, err)
+		}
+		if err := database.UpdateLastWeeklySent(db, user.ChatID, utils.CurrentTimeUTC()); err != nil {
+			return fmt.Errorf("Error updating lastWeeklySent: %v", err)
 		}
 	}
 
