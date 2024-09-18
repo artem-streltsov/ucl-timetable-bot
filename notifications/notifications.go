@@ -18,39 +18,38 @@ func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
 	today := time.Now().UTC().Format("20060102")
 	lectures := []*ical.VEvent{}
 	for _, event := range calendar.Events() {
-		start := event.GetProperty("DTSTART").Value
-		if strings.HasPrefix(start, today) {
+		start := event.GetProperty(ical.ComponentPropertyDtStart)
+		if start != nil && strings.HasPrefix(start.Value, today) {
 			lectures = append(lectures, event)
 		}
 	}
 	return lectures
 }
 
-func SendDailySummary(bot common.BotAPI, chatID int64, webcalURL string) {
+func SendDailySummary(bot common.BotAPI, chatID int64, webcalURL string) error {
 	response, err := http.Get(webcalURL)
 	if err != nil {
-		log.Println("Error fetching calendar for chatID:", chatID, err)
-		return
+		return fmt.Errorf("error fetching calendar: %w", err)
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		log.Println("Error reading calendar for chatID:", chatID, err)
-		return
+		return fmt.Errorf("error reading calendar: %w", err)
 	}
 
 	calendar, err := ical.ParseCalendar(strings.NewReader(string(body)))
 	if err != nil {
-		log.Println("Error parsing calendar for chatID:", chatID, err)
-		return
+		return fmt.Errorf("error parsing calendar: %w", err)
 	}
 
 	lecturesThisDay := getDayLectures(calendar)
 	if len(lecturesThisDay) == 0 {
 		msg := bot.NewMessage(chatID, "No lectures scheduled for today.")
-		bot.Send(msg)
-		return
+		if _, err := bot.Send(msg); err != nil {
+			return fmt.Errorf("error sending no lectures message: %w", err)
+		}
+		return nil
 	}
 
 	message := "Today's Lectures:\n"
@@ -59,7 +58,10 @@ func SendDailySummary(bot common.BotAPI, chatID int64, webcalURL string) {
 	}
 
 	msg := bot.NewMessage(chatID, message)
-	bot.Send(msg)
+	if _, err := bot.Send(msg); err != nil {
+		return fmt.Errorf("error sending daily summary: %w", err)
+	}
+	return nil
 }
 
 func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
@@ -76,9 +78,14 @@ func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
 
 	for _, event := range calendar.Events() {
-		startTimeStr := event.GetProperty("DTSTART").Value
+		startProp := event.GetProperty(ical.ComponentPropertyDtStart)
+		if startProp == nil {
+			continue
+		}
+		startTimeStr := startProp.Value
 		startTime, err := time.Parse("20060102T150405Z", startTimeStr)
 		if err != nil {
+			log.Printf("Error parsing start time: %v", err)
 			continue
 		}
 
@@ -91,31 +98,30 @@ func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 	return lectures
 }
 
-func SendWeeklySummary(bot common.BotAPI, chatID int64, webcalURL string) {
+func SendWeeklySummary(bot common.BotAPI, chatID int64, webcalURL string) error {
 	response, err := http.Get(webcalURL)
 	if err != nil {
-		log.Println("Error fetching calendar for chatID:", chatID, err)
-		return
+		return fmt.Errorf("error fetching calendar: %w", err)
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		log.Println("Error reading calendar for chatID:", chatID, err)
-		return
+		return fmt.Errorf("error reading calendar: %w", err)
 	}
 
 	calendar, err := ical.ParseCalendar(strings.NewReader(string(body)))
 	if err != nil {
-		log.Println("Error parsing calendar for chatID:", chatID, err)
-		return
+		return fmt.Errorf("error parsing calendar: %w", err)
 	}
 
 	lecturesThisWeek := getWeekLectures(calendar)
 	if len(lecturesThisWeek) == 0 {
 		msg := bot.NewMessage(chatID, "No lectures scheduled for this week.")
-		bot.Send(msg)
-		return
+		if _, err := bot.Send(msg); err != nil {
+			return fmt.Errorf("error sending no lectures message: %w", err)
+		}
+		return nil
 	}
 
 	message := "This Week's Lectures:\n"
@@ -127,20 +133,38 @@ func SendWeeklySummary(bot common.BotAPI, chatID int64, webcalURL string) {
 	}
 
 	msg := bot.NewMessage(chatID, message)
-	bot.Send(msg)
+	if _, err := bot.Send(msg); err != nil {
+		return fmt.Errorf("error sending weekly summary: %w", err)
+	}
+	return nil
 }
 
-func SendReminder(bot common.BotAPI, chatID int64, lecture *ical.VEvent) {
+func SendReminder(bot common.BotAPI, chatID int64, lecture *ical.VEvent) error {
 	message := fmt.Sprintf("Reminder: Your lecture is starting in %v minutes!\n", reminderOffset)
 	message += FormatEventDetails(lecture)
 	msg := bot.NewMessage(chatID, message)
-	bot.Send(msg)
+	if _, err := bot.Send(msg); err != nil {
+		return fmt.Errorf("error sending reminder: %w", err)
+	}
+	return nil
 }
 
 func FormatEventDetails(event *ical.VEvent) string {
-	summary := event.GetProperty("SUMMARY").Value
-	location := event.GetProperty("LOCATION").Value
-	startTime := event.GetProperty("DTSTART").Value
-	start, _ := time.Parse("20060102T150405Z", startTime)
-	return fmt.Sprintf("- %s at %s, starting at %s", summary, location, start.Format("15:04"))
+	summary := "Unknown"
+	location := "Unknown"
+	startTime := "Unknown"
+
+	if summaryProp := event.GetProperty(ical.ComponentPropertySummary); summaryProp != nil {
+		summary = summaryProp.Value
+	}
+	if locationProp := event.GetProperty(ical.ComponentPropertyLocation); locationProp != nil {
+		location = locationProp.Value
+	}
+	if startProp := event.GetProperty(ical.ComponentPropertyDtStart); startProp != nil {
+		if start, err := time.Parse("20060102T150405Z", startProp.Value); err == nil {
+			startTime = start.Format("15:04")
+		}
+	}
+
+	return fmt.Sprintf("- %s at %s, starting at %s", summary, location, startTime)
 }

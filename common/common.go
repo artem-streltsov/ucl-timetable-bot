@@ -2,10 +2,15 @@ package common
 
 import tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
+type Chattable = tgbotapi.Chattable
+type Message = tgbotapi.Message
+type Update = tgbotapi.Update
+type MessageConfig = tgbotapi.MessageConfig
+
 type BotAPI interface {
-	Send(c tgbotapi.Chattable) (tgbotapi.Message, error)
+	Send(c Chattable) (Message, error)
 	GetUpdatesChan(config tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel
-	NewMessage(chatID int64, text string) tgbotapi.MessageConfig
+	NewMessage(chatID int64, text string) MessageConfig
 }
 
 type BotAPIWrapper struct {
@@ -16,7 +21,7 @@ func NewBotAPIWrapper(api *tgbotapi.BotAPI) *BotAPIWrapper {
 	return &BotAPIWrapper{api: api}
 }
 
-func (b *BotAPIWrapper) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+func (b *BotAPIWrapper) Send(c Chattable) (Message, error) {
 	return b.api.Send(c)
 }
 
@@ -24,6 +29,6 @@ func (b *BotAPIWrapper) GetUpdatesChan(config tgbotapi.UpdateConfig) tgbotapi.Up
 	return b.api.GetUpdatesChan(config)
 }
 
-func (b *BotAPIWrapper) NewMessage(chatID int64, text string) tgbotapi.MessageConfig {
+func (b *BotAPIWrapper) NewMessage(chatID int64, text string) MessageConfig {
 	return tgbotapi.NewMessage(chatID, text)
 }

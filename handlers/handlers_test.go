@@ -2,34 +2,33 @@ package handlers_test
 
 import (
 	"database/sql"
-	"log"
 	"testing"
 
+	"github.com/artem-streltsov/ucl-timetable-bot/database"
 	"github.com/artem-streltsov/ucl-timetable-bot/handlers"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func initDB() (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		return nil, err
-	}
+type MockBotAPI struct {
+	mock.Mock
+}
 
-	schema := `
-        CREATE TABLE users (
-            chatID INTEGER PRIMARY KEY,
-            webcalURL TEXT,
-            lastDailySent DATETIME,
-            lastWeeklySent DATETIME
-        );
-        `
-	_, err = db.Exec(schema)
-	if err != nil {
-		return nil, err
-	}
+func (m *MockBotAPI) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+	args := m.Called(c)
+	return args.Get(0).(tgbotapi.Message), args.Error(1)
+}
 
-	return db, nil
+func (m *MockBotAPI) GetUpdatesChan(config tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel {
+	args := m.Called(config)
+	return args.Get(0).(tgbotapi.UpdatesChannel)
+}
+
+func (m *MockBotAPI) NewMessage(chatID int64, text string) tgbotapi.MessageConfig {
+	args := m.Called(chatID, text)
+	return args.Get(0).(tgbotapi.MessageConfig)
 }
 
 func TestValidateWebCalLink(t *testing.T) {
@@ -51,22 +50,70 @@ func TestValidateWebCalLink(t *testing.T) {
 	}
 }
 
-func TestSaveWebCalLink(t *testing.T) {
-	db, err := initDB()
-	if err != nil {
-		log.Fatal(err)
-	}
+func TestHandleWebCalLink(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
 	defer db.Close()
 
-	chatID := int64(123)
-	webcalURL := "https://example.com"
-
-	err = handlers.SaveWebCalLink(db, chatID, webcalURL)
+	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME)`)
 	assert.NoError(t, err)
 
-	var url string
-	row := db.QueryRow("SELECT webcalURL FROM users WHERE chatID = ?", chatID)
-	err = row.Scan(&url)
+	mockBot := new(MockBotAPI)
+	mockBot.On("NewMessage", int64(123), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("NewMessage", int64(456), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	handlers.HandleWebCalLink(mockBot, db, 123, "webcal://example.com")
+
+	var savedURL string
+	err = db.QueryRow("SELECT webcalURL FROM users WHERE chatID = ?", 123).Scan(&savedURL)
 	assert.NoError(t, err)
-	assert.Equal(t, webcalURL, url)
+	assert.Equal(t, "https://example.com", savedURL)
+
+	handlers.HandleWebCalLink(mockBot, db, 456, "http://example.com")
+
+	err = db.QueryRow("SELECT webcalURL FROM users WHERE chatID = ?", 456).Scan(&savedURL)
+	assert.Error(t, err)
+
+	mockBot.AssertExpectations(t)
+}
+
+func TestHandleTodayCommand(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME)`)
+	assert.NoError(t, err)
+
+	err = database.InsertUser(db, 123, "https://example.com")
+	assert.NoError(t, err)
+
+	mockBot := new(MockBotAPI)
+	mockBot.On("NewMessage", int64(123), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	handlers.HandleTodayCommand(mockBot, db, 123)
+
+	mockBot.AssertExpectations(t)
+}
+
+func TestHandleWeekCommand(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME)`)
+	assert.NoError(t, err)
+
+	err = database.InsertUser(db, 123, "https://example.com")
+	assert.NoError(t, err)
+
+	mockBot := new(MockBotAPI)
+	mockBot.On("NewMessage", int64(123), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	handlers.HandleWeekCommand(mockBot, db, 123)
+
+	mockBot.AssertExpectations(t)
 }

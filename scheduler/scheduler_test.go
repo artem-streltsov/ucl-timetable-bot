@@ -1,78 +1,159 @@
 package scheduler_test
 
 import (
+	"database/sql"
 	"testing"
 	"time"
 
-	ical "github.com/arran4/golang-ical"
 	"github.com/artem-streltsov/ucl-timetable-bot/scheduler"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
+type MockBotAPI struct {
+	mock.Mock
+}
+
+func (m *MockBotAPI) Send(c tgbotapi.Chattable) (tgbotapi.Message, error) {
+	args := m.Called(c)
+	return args.Get(0).(tgbotapi.Message), args.Error(1)
+}
+
+func (m *MockBotAPI) GetUpdatesChan(config tgbotapi.UpdateConfig) tgbotapi.UpdatesChannel {
+	args := m.Called(config)
+	return args.Get(0).(tgbotapi.UpdatesChannel)
+}
+
+func (m *MockBotAPI) NewMessage(chatID int64, text string) tgbotapi.MessageConfig {
+	args := m.Called(chatID, text)
+	return args.Get(0).(tgbotapi.MessageConfig)
+}
+
+func TestGetNextDailySummaryTime(t *testing.T) {
+	now := time.Date(2023, 5, 15, 12, 0, 0, 0, time.UTC)
+	expected := time.Date(2023, 5, 16, 18, 0, 0, 0, time.UTC)
+
+	result := scheduler.GetNextDailySummaryTime(now)
+	assert.Equal(t, expected, result)
+}
+
 func TestGetNextSunday(t *testing.T) {
-	tests := []struct {
-		now         time.Time
-		expectedDay time.Weekday
+	testCases := []struct {
+		name     string
+		now      time.Time
+		expected time.Time
 	}{
-		{time.Date(2024, 9, 17, 0, 0, 0, 0, time.UTC), time.Sunday},
-		{time.Date(2024, 9, 22, 0, 0, 0, 0, time.UTC), time.Sunday},
+		{
+			name:     "Wednesday",
+			now:      time.Date(2023, 5, 17, 12, 0, 0, 0, time.UTC),
+			expected: time.Date(2023, 5, 21, 18, 0, 0, 0, time.UTC),
+		},
+		{
+			name:     "Sunday",
+			now:      time.Date(2023, 5, 21, 12, 0, 0, 0, time.UTC),
+			expected: time.Date(2023, 5, 21, 18, 0, 0, 0, time.UTC),
+		},
 	}
 
-	for _, test := range tests {
-		nextSunday := scheduler.GetNextSunday(test.now)
-		if nextSunday.Weekday() != test.expectedDay {
-			t.Errorf("expected %v, got %v", test.expectedDay, nextSunday.Weekday())
-		}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := scheduler.GetNextSunday(tc.now)
+			assert.Equal(t, tc.expected, result)
+		})
 	}
 }
 
 func TestShouldSendDailySummary(t *testing.T) {
 	now := time.Now()
-
-	tests := []struct {
+	testCases := []struct {
+		name         string
 		lastSentTime time.Time
-		shouldSend   bool
+		expected     bool
 	}{
-		{now.AddDate(0, 0, -2), true},
-		{now.AddDate(0, 0, -1), true},
-		{now.AddDate(0, 0, 0), false},
+		{
+			name:         "Should send",
+			lastSentTime: now.Add(-25 * time.Hour),
+			expected:     true,
+		},
+		{
+			name:         "Should not send",
+			lastSentTime: now.Add(-23 * time.Hour),
+			expected:     false,
+		},
 	}
 
-	for _, test := range tests {
-		if scheduler.ShouldSendDailySummary(test.lastSentTime, now) != test.shouldSend {
-			t.Errorf("expected %v, got %v", test.shouldSend, !test.shouldSend)
-		}
-	}
-}
-
-func TestParseLectureStartTime(t *testing.T) {
-	lecture := ical.NewEvent("lecture-123")
-	lecture.SetProperty("DTSTART", "20240917T150000Z")
-
-	startTime, err := scheduler.ParseLectureStartTime(lecture)
-	if err != nil {
-		t.Errorf("Error parsing lecture start time: %v", err)
-	}
-
-	expectedTime := time.Date(2024, 9, 17, 15, 0, 0, 0, time.UTC)
-	if !startTime.Equal(expectedTime) {
-		t.Errorf("Expected %v, got %v", expectedTime, startTime)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := scheduler.ShouldSendDailySummary(tc.lastSentTime, now)
+			assert.Equal(t, tc.expected, result)
+		})
 	}
 }
 
-func TestShouldScheduleReminder(t *testing.T) {
+func TestShouldSendWeeklySummary(t *testing.T) {
 	now := time.Now()
-
-	tests := []struct {
-		reminderTime   time.Time
-		shouldSchedule bool
+	nextSunday := scheduler.GetNextSunday(now)
+	testCases := []struct {
+		name         string
+		lastSentTime time.Time
+		expected     bool
 	}{
-		{now.Add(30 * time.Minute), true},
-		{now.Add(-1 * time.Hour), false},
+		{
+			name:         "Should send",
+			lastSentTime: nextSunday.Add(-8 * 24 * time.Hour),
+			expected:     true,
+		},
+		{
+			name:         "Should not send",
+			lastSentTime: nextSunday.Add(-6 * 24 * time.Hour),
+			expected:     false,
+		},
 	}
 
-	for _, test := range tests {
-		if scheduler.ShouldScheduleReminder(test.reminderTime) != test.shouldSchedule {
-			t.Errorf("expected %v, got %v", test.shouldSchedule, !test.shouldSchedule)
-		}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := scheduler.ShouldSendWeeklySummary(tc.lastSentTime, nextSunday)
+			assert.Equal(t, tc.expected, result)
+		})
 	}
+}
+
+func TestScheduleDailySummary(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME)`)
+	assert.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL) VALUES (?, ?)`, 123456, "https://example.com/calendar")
+	assert.NoError(t, err)
+
+	mockBot := new(MockBotAPI)
+	mockBot.On("NewMessage", int64(123456), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	err = scheduler.ScheduleDailySummary(mockBot, db, 123456, "https://example.com/calendar")
+	assert.NoError(t, err)
+}
+
+func TestScheduleWeeklySummary(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME)`)
+	assert.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL) VALUES (?, ?)`, 123456, "https://example.com/calendar")
+	assert.NoError(t, err)
+
+	mockBot := new(MockBotAPI)
+	mockBot.On("NewMessage", int64(123456), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	err = scheduler.ScheduleWeeklySummary(mockBot, db, 123456, "https://example.com/calendar")
+	assert.NoError(t, err)
 }

@@ -19,7 +19,7 @@ type Bot struct {
 func InitBot(telegramToken string, db *sql.DB) (*Bot, error) {
 	botAPI, err := tgbotapi.NewBotAPI(telegramToken)
 	if err != nil {
-		log.Fatalf("Failed to initialize bot: %v", err)
+		return nil, err
 	}
 	botAPI.Debug = false
 
@@ -38,14 +38,14 @@ func InitBot(telegramToken string, db *sql.DB) (*Bot, error) {
 	return b, nil
 }
 
-func (b *Bot) Run(ctx context.Context, db *sql.DB) {
+func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 	log.Println("Bot is running...")
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Shutting down bot...")
-			return
+			return ctx.Err()
 		case update := <-b.updates:
 			if update.Message == nil {
 				continue

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -14,89 +15,131 @@ import (
 
 func HandleStartCommand(bot common.BotAPI, chatID int64) {
 	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable.")
-	bot.Send(msg)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending start message: %v", err)
+	}
 }
 
 func ValidateWebCalLink(webcalURL string) (string, bool) {
 	webcalURL = strings.ToLower(webcalURL)
-
 	if !strings.HasPrefix(webcalURL, "webcal://") {
 		return "", false
 	}
-
-	webcalURL = strings.Replace(webcalURL, "webcal://", "https://", 1)
-	return webcalURL, true
-}
-
-func SaveWebCalLink(db *sql.DB, chatID int64, webcalURL string) error {
-	return database.InsertUser(db, chatID, webcalURL)
-}
-
-func SendNotifications(bot common.BotAPI, chatID int64, webcalURL string) {
-	notifications.SendWeeklySummary(bot, chatID, webcalURL)
-
-	currentWeekday := time.Now().UTC().Weekday()
-	if currentWeekday != time.Sunday && currentWeekday != time.Saturday {
-		notifications.SendDailySummary(bot, chatID, webcalURL)
-	}
-}
-
-func ScheduleNotifications(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) {
-	scheduler.ScheduleDailySummary(bot, db, chatID, webcalURL)
-	scheduler.ScheduleWeeklySummary(bot, db, chatID, webcalURL)
+	return strings.Replace(webcalURL, "webcal://", "https://", 1), true
 }
 
 func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) {
 	validWebCalURL, valid := ValidateWebCalLink(webcalURL)
 	if !valid {
 		msg := bot.NewMessage(chatID, "Invalid link! Please provide a valid WebCal link that starts with 'webcal://'.")
-		bot.Send(msg)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending invalid link message: %v", err)
+		}
 		return
 	}
 
-	err := SaveWebCalLink(db, chatID, validWebCalURL)
-	if err != nil {
-		log.Println("Error saving WebCal link:", err)
+	if err := database.InsertUser(db, chatID, validWebCalURL); err != nil {
+		log.Printf("Error saving WebCal link: %v", err)
 		msg := bot.NewMessage(chatID, "There was an error saving your WebCal link. Please try again.")
-		bot.Send(msg)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
 		return
 	}
 
 	msg := bot.NewMessage(chatID, "Thank you! You will start receiving daily and weekly updates for your lectures.")
-	bot.Send(msg)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending confirmation message: %v", err)
+	}
 
-	SendNotifications(bot, chatID, validWebCalURL)
-	ScheduleNotifications(bot, db, chatID, validWebCalURL)
+	if err := SendNotifications(bot, chatID, validWebCalURL); err != nil {
+		log.Printf("Error sending initial notifications: %v", err)
+	}
+
+	if err := ScheduleNotifications(bot, db, chatID, validWebCalURL); err != nil {
+		log.Printf("Error scheduling notifications: %v", err)
+	}
+}
+
+func SendNotifications(bot common.BotAPI, chatID int64, webcalURL string) error {
+	if err := notifications.SendWeeklySummary(bot, chatID, webcalURL); err != nil {
+		return fmt.Errorf("error sending weekly summary: %w", err)
+	}
+
+	currentWeekday := time.Now().UTC().Weekday()
+	if currentWeekday != time.Sunday && currentWeekday != time.Saturday {
+		if err := notifications.SendDailySummary(bot, chatID, webcalURL); err != nil {
+			return fmt.Errorf("error sending daily summary: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func ScheduleNotifications(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
+	if err := scheduler.ScheduleDailySummary(bot, db, chatID, webcalURL); err != nil {
+		return fmt.Errorf("error scheduling daily summary: %w", err)
+	}
+
+	if err := scheduler.ScheduleWeeklySummary(bot, db, chatID, webcalURL); err != nil {
+		return fmt.Errorf("error scheduling weekly summary: %w", err)
+	}
+
+	return nil
 }
 
 func HandleTodayCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
-    webCalURL, err := database.GetWebCalURL(db, chatID)
-    if err != nil {
+	webcalURL, err := database.GetWebCalURL(db, chatID)
+	if err != nil {
+		log.Printf("Error fetching WebCal URL: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while fetching your timetable. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+		return
+	}
 
-    }
+	if webcalURL == "" {
+		msg := bot.NewMessage(chatID, "You haven't provided a WebCal link yet. Please use the /start command to set up your timetable.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending WebCal not found message: %v", err)
+		}
+		return
+	}
 
-    if webCalURL == "" {
-		msg := bot.NewMessage(chatID, "Error finding your WebCal link.")
-        bot.Send(msg)
-        HandleStartCommand(bot, chatID)
-        return
-    }
-
-    notifications.SendDailySummary(bot, chatID, webCalURL)
+	if err := notifications.SendDailySummary(bot, chatID, webcalURL); err != nil {
+		log.Printf("Error sending daily summary: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while fetching today's lectures. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+	}
 }
 
 func HandleWeekCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
-    webCalURL, err := database.GetWebCalURL(db, chatID)
-    if err != nil {
+	webcalURL, err := database.GetWebCalURL(db, chatID)
+	if err != nil {
+		log.Printf("Error fetching WebCal URL: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while fetching your timetable. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+		return
+	}
 
-    }
+	if webcalURL == "" {
+		msg := bot.NewMessage(chatID, "You haven't provided a WebCal link yet. Please use the /start command to set up your timetable.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending WebCal not found message: %v", err)
+		}
+		return
+	}
 
-    if webCalURL == "" {
-		msg := bot.NewMessage(chatID, "Error finding your WebCal link.")
-        bot.Send(msg)
-        HandleStartCommand(bot, chatID)
-        return
-    }
-
-    notifications.SendWeeklySummary(bot, chatID, webCalURL)
+	if err := notifications.SendWeeklySummary(bot, chatID, webcalURL); err != nil {
+		log.Printf("Error sending weekly summary: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while fetching this week's lectures. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+	}
 }

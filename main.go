@@ -8,50 +8,48 @@ import (
 	"syscall"
 
 	"github.com/artem-streltsov/ucl-timetable-bot/bot"
+	"github.com/artem-streltsov/ucl-timetable-bot/config"
 	"github.com/artem-streltsov/ucl-timetable-bot/database"
-	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
-	err := godotenv.Load()
+	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
-	if telegramToken == "" {
-		log.Fatalf("TELEGRAM_BOT_TOKEN not found in environment variables")
-	}
-
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		log.Fatalf("DB_PATH not found in environment variables")
-	}
-
-	db, err := database.InitDB(dbPath)
+	db, err := database.InitDB(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
-	bot, err := bot.InitBot(telegramToken, db)
+	bot, err := bot.InitBot(cfg.TelegramBotToken, db)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
 
 	go func() {
 		log.Println("Starting the bot...")
-		bot.Run(ctx, db)
+		if err := bot.Run(ctx, db); err != nil {
+			log.Printf("Error running bot: %v", err)
+			cancel()
+		}
 	}()
 
-	sig := <-signalChan
-	log.Printf("Received signal: %v", sig)
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
-	cancel()
-	log.Println("Bot shut down successfully. Exiting program.")
+	select {
+	case sig := <-signalChan:
+		log.Printf("Received signal: %v", sig)
+	case <-ctx.Done():
+		log.Println("Context canceled")
+	}
+
+	log.Println("Shutting down gracefully...")
 }

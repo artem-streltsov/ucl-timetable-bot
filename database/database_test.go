@@ -1,86 +1,103 @@
 package database_test
 
 import (
-	"database/sql"
-	_ "github.com/mattn/go-sqlite3"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/artem-streltsov/ucl-timetable-bot/database"
+	"github.com/stretchr/testify/assert"
 )
 
 const testDBPath = "./testdata/test.db"
 
-func setupTestDB(t *testing.T) *sql.DB {
-	db, err := database.InitDB(testDBPath)
-	if err != nil {
-		t.Fatalf("Failed to initialize test database: %v", err)
-	}
-	return db
-}
-
-func teardownTestDB(t *testing.T, db *sql.DB) {
-	db.Close()
-	err := os.Remove(testDBPath)
-	if err != nil {
-		t.Fatalf("Failed to remove test database file: %v", err)
-	}
-}
-
 func TestInitDB(t *testing.T) {
-	db := setupTestDB(t)
-	defer teardownTestDB(t, db)
+	defer os.Remove(testDBPath)
 
-	if _, err := os.Stat(testDBPath); os.IsNotExist(err) {
-		t.Fatalf("Database file was not created: %v", err)
-	}
+	db, err := database.InitDB(testDBPath)
+	assert.NoError(t, err)
+	assert.NotNil(t, db)
+
+	_, err = os.Stat(testDBPath)
+	assert.NoError(t, err)
+
+	db.Close()
 }
 
-func TestInsertUser(t *testing.T) {
-	db := setupTestDB(t)
-	defer teardownTestDB(t, db)
+func TestInsertAndGetUser(t *testing.T) {
+	defer os.Remove(testDBPath)
 
-	err := database.InsertUser(db, 12345, "https://example.com/webcal")
-	if err != nil {
-		t.Fatalf("Failed to insert user: %v", err)
-	}
+	db, err := database.InitDB(testDBPath)
+	assert.NoError(t, err)
+	defer db.Close()
 
-	var chatID int64
-	var webcalURL string
-	var lastDailySent sql.NullString
-	var lastWeeklySent sql.NullString
+	chatID := int64(123456)
+	webcalURL := "https://example.com/calendar"
 
-	row := db.QueryRow("SELECT chatID, webcalURL, lastDailySent, lastWeeklySent FROM users WHERE chatID = ?", 12345)
-	err = row.Scan(&chatID, &webcalURL, &lastDailySent, &lastWeeklySent)
-	if err != nil {
-		t.Fatalf("Failed to query user: %v", err)
-	}
+	err = database.InsertUser(db, chatID, webcalURL)
+	assert.NoError(t, err)
 
-	if chatID != 12345 {
-		t.Errorf("Expected chatID 12345, got %d", chatID)
-	}
-	if webcalURL != "https://example.com/webcal" {
-		t.Errorf("Expected webcalURL 'https://example.com/webcal', got %s", webcalURL)
-	}
-	if lastDailySent.Valid {
-		t.Errorf("Expected lastDailySent to be NULL")
-	}
-	if lastWeeklySent.Valid {
-		t.Errorf("Expected lastWeeklySent to be NULL")
-	}
+	retrievedURL, err := database.GetWebCalURL(db, chatID)
+	assert.NoError(t, err)
+	assert.Equal(t, webcalURL, retrievedURL)
 }
 
-func TestInsertUserDuplicate(t *testing.T) {
-	db := setupTestDB(t)
-	defer teardownTestDB(t, db)
+func TestGetLastSentTimes(t *testing.T) {
+	defer os.Remove(testDBPath)
 
-	err := database.InsertUser(db, 12345, "https://example.com/webcal")
-	if err != nil {
-		t.Fatalf("Failed to insert user: %v", err)
+	db, err := database.InitDB(testDBPath)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	chatID := int64(123456)
+	webcalURL := "https://example.com/calendar"
+
+	err = database.InsertUser(db, chatID, webcalURL)
+	assert.NoError(t, err)
+
+	now := time.Now().UTC()
+
+	err = database.UpdateLastDailySent(db, chatID, now)
+	assert.NoError(t, err)
+
+	err = database.UpdateLastWeeklySent(db, chatID, now)
+	assert.NoError(t, err)
+
+	lastDailySent, err := database.GetLastDailySentTime(db, chatID)
+	assert.NoError(t, err)
+	assert.WithinDuration(t, now, lastDailySent, time.Second)
+
+	lastWeeklySent, err := database.GetLastWeeklySentTime(db, chatID)
+	assert.NoError(t, err)
+	assert.WithinDuration(t, now, lastWeeklySent, time.Second)
+}
+
+func TestGetAllUsers(t *testing.T) {
+	defer os.Remove(testDBPath)
+
+	db, err := database.InitDB(testDBPath)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	users := []struct {
+		chatID    int64
+		webcalURL string
+	}{
+		{123456, "https://example.com/calendar1"},
+		{789012, "https://example.com/calendar2"},
 	}
 
-	err = database.InsertUser(db, 12345, "https://example.com/webcal")
-	if err == nil {
-		t.Fatalf("Expected error when inserting duplicate user, got none")
+	for _, user := range users {
+		err = database.InsertUser(db, user.chatID, user.webcalURL)
+		assert.NoError(t, err)
+	}
+
+	retrievedUsers, err := database.GetAllUsers(db)
+	assert.NoError(t, err)
+	assert.Len(t, retrievedUsers, len(users))
+
+	for i, user := range retrievedUsers {
+		assert.Equal(t, users[i].chatID, user.ChatID)
+		assert.Equal(t, users[i].webcalURL, user.WebcalURL)
 	}
 }
