@@ -1,6 +1,7 @@
 package notifications
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -10,9 +11,8 @@ import (
 
 	ical "github.com/arran4/golang-ical"
 	"github.com/artem-streltsov/ucl-timetable-bot/common"
+	"github.com/artem-streltsov/ucl-timetable-bot/database"
 )
-
-const reminderOffset = time.Minute * 30
 
 func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
 	today := time.Now().UTC().Format("20060102")
@@ -26,7 +26,12 @@ func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
 	return lectures
 }
 
-func SendDailySummary(bot common.BotAPI, chatID int64, webcalURL string) error {
+func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
+	dailyNotificationTime, _, reminderOffset, err := database.GetUserPreferences(db, chatID)
+	if err != nil {
+		return fmt.Errorf("error getting user preferences: %w", err)
+	}
+
 	response, err := http.Get(webcalURL)
 	if err != nil {
 		return fmt.Errorf("error fetching calendar: %w", err)
@@ -52,7 +57,7 @@ func SendDailySummary(bot common.BotAPI, chatID int64, webcalURL string) error {
 		return nil
 	}
 
-	message := "Today's Lectures:\n"
+	message := fmt.Sprintf("Today's Lectures (Daily notification at %s, Reminder %d minutes before):\n", dailyNotificationTime, reminderOffset)
 	for _, lecture := range lecturesThisDay {
 		message += FormatEventDetails(lecture) + "\n"
 	}
@@ -98,7 +103,12 @@ func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 	return lectures
 }
 
-func SendWeeklySummary(bot common.BotAPI, chatID int64, webcalURL string) error {
+func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
+	_, weeklyNotificationTime, reminderOffset, err := database.GetUserPreferences(db, chatID)
+	if err != nil {
+		return fmt.Errorf("error getting user preferences: %w", err)
+	}
+
 	response, err := http.Get(webcalURL)
 	if err != nil {
 		return fmt.Errorf("error fetching calendar: %w", err)
@@ -124,7 +134,7 @@ func SendWeeklySummary(bot common.BotAPI, chatID int64, webcalURL string) error 
 		return nil
 	}
 
-	message := "This Week's Lectures:\n"
+	message := fmt.Sprintf("This Week's Lectures (Weekly notification at %s, Reminder %d minutes before):\n", weeklyNotificationTime, reminderOffset)
 	for day, lectures := range lecturesThisWeek {
 		message += fmt.Sprintf("\n%s:\n", day)
 		for _, lecture := range lectures {
@@ -140,7 +150,7 @@ func SendWeeklySummary(bot common.BotAPI, chatID int64, webcalURL string) error 
 }
 
 func SendReminder(bot common.BotAPI, chatID int64, lecture *ical.VEvent) error {
-	message := fmt.Sprintf("Reminder: Your lecture is starting in %v minutes!\n", reminderOffset)
+	message := fmt.Sprintf("Reminder: Your lecture is starting soon!\n")
 	message += FormatEventDetails(lecture)
 	msg := bot.NewMessage(chatID, message)
 	if _, err := bot.Send(msg); err != nil {

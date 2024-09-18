@@ -11,10 +11,13 @@ import (
 )
 
 type User struct {
-	ChatID         int64
-	WebcalURL      string
-	LastDailySent  time.Time
-	LastWeeklySent time.Time
+	ChatID                 int64
+	WebcalURL              string
+	LastDailySent          time.Time
+	LastWeeklySent         time.Time
+	DailyNotificationTime  string
+	WeeklyNotificationTime string
+	ReminderOffset         int
 }
 
 func InitDB(dbPath string) (*sql.DB, error) {
@@ -40,7 +43,10 @@ func InitDB(dbPath string) (*sql.DB, error) {
         chatID INTEGER PRIMARY KEY,
         webcalURL TEXT,
         lastDailySent DATETIME,
-        lastWeeklySent DATETIME
+        lastWeeklySent DATETIME,
+        dailyNotificationTime TEXT DEFAULT '18:00',
+        weeklyNotificationTime TEXT DEFAULT 'SUN 18:00',
+        reminderOffset INTEGER DEFAULT 30
     );
     `
 
@@ -53,7 +59,8 @@ func InitDB(dbPath string) (*sql.DB, error) {
 }
 
 func InsertUser(db *sql.DB, chatID int64, webcalURL string) error {
-	insertSQL := `INSERT OR REPLACE INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent) VALUES (?, ?, NULL, NULL)`
+	insertSQL := `INSERT OR REPLACE INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent) 
+				  VALUES (?, ?, NULL, NULL)`
 	_, err := db.Exec(insertSQL, chatID, webcalURL)
 	if err != nil {
 		return fmt.Errorf("failed to insert user: %w", err)
@@ -113,8 +120,26 @@ func UpdateLastWeeklySent(db *sql.DB, chatID int64, lastSent time.Time) error {
 	return nil
 }
 
+func GetUserPreferences(db *sql.DB, chatID int64) (string, string, int, error) {
+	var dailyNotificationTime, weeklyNotificationTime string
+	var reminderOffset int
+	err := db.QueryRow("SELECT dailyNotificationTime, weeklyNotificationTime, reminderOffset FROM users WHERE chatID = ?", chatID).Scan(&dailyNotificationTime, &weeklyNotificationTime, &reminderOffset)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("failed to query user preferences: %w", err)
+	}
+	return dailyNotificationTime, weeklyNotificationTime, reminderOffset, nil
+}
+
+func UpdateUserPreferences(db *sql.DB, chatID int64, dailyNotificationTime, weeklyNotificationTime string, reminderOffset int) error {
+	_, err := db.Exec("UPDATE users SET dailyNotificationTime = ?, weeklyNotificationTime = ?, reminderOffset = ? WHERE chatID = ?", dailyNotificationTime, weeklyNotificationTime, reminderOffset, chatID)
+	if err != nil {
+		return fmt.Errorf("failed to update user preferences: %w", err)
+	}
+	return nil
+}
+
 func GetAllUsers(db *sql.DB) ([]User, error) {
-	rows, err := db.Query("SELECT chatID, webcalURL, lastDailySent, lastWeeklySent FROM users")
+	rows, err := db.Query("SELECT chatID, webcalURL, lastDailySent, lastWeeklySent, dailyNotificationTime, weeklyNotificationTime, reminderOffset FROM users")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
@@ -124,7 +149,7 @@ func GetAllUsers(db *sql.DB) ([]User, error) {
 	for rows.Next() {
 		var user User
 		var lastDailySent, lastWeeklySent sql.NullTime
-		err := rows.Scan(&user.ChatID, &user.WebcalURL, &lastDailySent, &lastWeeklySent)
+		err := rows.Scan(&user.ChatID, &user.WebcalURL, &lastDailySent, &lastWeeklySent, &user.DailyNotificationTime, &user.WeeklyNotificationTime, &user.ReminderOffset)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user row: %w", err)
 		}

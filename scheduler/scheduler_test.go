@@ -31,35 +31,37 @@ func (m *MockBotAPI) NewMessage(chatID int64, text string) tgbotapi.MessageConfi
 	return args.Get(0).(tgbotapi.MessageConfig)
 }
 
-func TestGetNextDailySummaryTime(t *testing.T) {
-	now := time.Date(2023, 5, 15, 12, 0, 0, 0, time.UTC)
-	expected := time.Date(2023, 5, 16, 18, 0, 0, 0, time.UTC)
-
-	result := scheduler.GetNextDailySummaryTime(now)
-	assert.Equal(t, expected, result)
-}
-
-func TestGetNextSunday(t *testing.T) {
+func TestGetNextNotificationTime(t *testing.T) {
 	testCases := []struct {
-		name     string
-		now      time.Time
-		expected time.Time
+		name       string
+		now        time.Time
+		dailyTime  string
+		weeklyTime string
+		expected   time.Time
 	}{
 		{
-			name:     "Wednesday",
-			now:      time.Date(2023, 5, 17, 12, 0, 0, 0, time.UTC),
-			expected: time.Date(2023, 5, 21, 18, 0, 0, 0, time.UTC),
+			name:      "Daily notification",
+			now:       time.Date(2023, 5, 15, 12, 0, 0, 0, time.UTC),
+			dailyTime: "18:00",
+			expected:  time.Date(2023, 5, 15, 18, 0, 0, 0, time.UTC),
 		},
 		{
-			name:     "Sunday",
-			now:      time.Date(2023, 5, 21, 12, 0, 0, 0, time.UTC),
-			expected: time.Date(2023, 5, 21, 18, 0, 0, 0, time.UTC),
+			name:       "Weekly notification",
+			now:        time.Date(2023, 5, 15, 12, 0, 0, 0, time.UTC),
+			weeklyTime: "SUN 10:00",
+			expected:   time.Date(2023, 5, 21, 10, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "Next day daily notification",
+			now:       time.Date(2023, 5, 15, 19, 0, 0, 0, time.UTC),
+			dailyTime: "18:00",
+			expected:  time.Date(2023, 5, 16, 18, 0, 0, 0, time.UTC),
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := scheduler.GetNextSunday(tc.now)
+			result := scheduler.GetNextNotificationTime(tc.now, tc.dailyTime, tc.weeklyTime)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
@@ -70,10 +72,10 @@ func TestScheduleDailySummary(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME)`)
+	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME, dailyNotificationTime TEXT, weeklyNotificationTime TEXT, reminderOffset INTEGER)`)
 	assert.NoError(t, err)
 
-	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL) VALUES (?, ?)`, 123456, "https://example.com/calendar")
+	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL, dailyNotificationTime) VALUES (?, ?, ?)`, 123456, "https://example.com/calendar", "18:00")
 	assert.NoError(t, err)
 
 	mockBot := new(MockBotAPI)
@@ -89,10 +91,10 @@ func TestScheduleWeeklySummary(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME)`)
+	_, err = db.Exec(`CREATE TABLE users (chatID INTEGER PRIMARY KEY, webcalURL TEXT, lastDailySent DATETIME, lastWeeklySent DATETIME, dailyNotificationTime TEXT, weeklyNotificationTime TEXT, reminderOffset INTEGER)`)
 	assert.NoError(t, err)
 
-	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL) VALUES (?, ?)`, 123456, "https://example.com/calendar")
+	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL, weeklyNotificationTime) VALUES (?, ?, ?)`, 123456, "https://example.com/calendar", "SUN 18:00")
 	assert.NoError(t, err)
 
 	mockBot := new(MockBotAPI)
