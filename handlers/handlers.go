@@ -160,14 +160,35 @@ func HandleSettingsCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
 		"Weekly Notification Time: %s\n"+
 		"Reminder Offset: %d minutes\n\n"+
 		"To update your settings, use the following commands:\n"+
-		"/set_daily_time HH:MM\n"+
-		"/set_weekly_time DAY HH:MM (e.g., SUN 18:00)\n"+
-		"/set_reminder_offset MM",
+		"/set_daily_time\n"+
+		"/set_weekly_time\n"+
+		"/set_reminder_offset",
 		dailyNotificationTime, weeklyNotificationTime, reminderOffset)
 
 	msg := bot.NewMessage(chatID, settingsMessage)
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending settings message: %v", err)
+	}
+}
+
+func HandleSetDailyTimePrompt(bot common.BotAPI, chatID int64) {
+	msg := bot.NewMessage(chatID, "Please enter the time for daily notifications in HH:MM format (24-hour).")
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending daily time prompt: %v", err)
+	}
+}
+
+func HandleSetWeeklyTimePrompt(bot common.BotAPI, chatID int64) {
+	msg := bot.NewMessage(chatID, "Please enter the day and time for weekly notifications in the format DAY HH:MM (e.g., SUN 18:00).")
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending weekly time prompt: %v", err)
+	}
+}
+
+func HandleSetReminderOffsetPrompt(bot common.BotAPI, chatID int64) {
+	msg := bot.NewMessage(chatID, "Please enter the reminder offset in minutes (e.g., 30 for 30 minutes before the lecture).")
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending reminder offset prompt: %v", err)
 	}
 }
 
@@ -180,7 +201,7 @@ func HandleSetDailyTime(bot common.BotAPI, db *sql.DB, chatID int64, timeStr str
 		return
 	}
 
-	if err := updateUserPreference(db, chatID, "dailyNotificationTime", timeStr); err != nil {
+	if err := UpdateUserPreference(db, chatID, "dailyNotificationTime", timeStr, "", 0); err != nil {
 		log.Printf("Error updating daily notification time: %v", err)
 		msg := bot.NewMessage(chatID, "An error occurred while updating your settings. Please try again later.")
 		if _, err := bot.Send(msg); err != nil {
@@ -216,7 +237,7 @@ func HandleSetWeeklyTime(bot common.BotAPI, db *sql.DB, chatID int64, dayAndTime
 		return
 	}
 
-	if err := updateUserPreference(db, chatID, "weeklyNotificationTime", fmt.Sprintf("%s %s", day, timeStr)); err != nil {
+	if err := UpdateUserPreference(db, chatID, "weeklyNotificationTime", "", fmt.Sprintf("%s %s", day, timeStr), 0); err != nil {
 		log.Printf("Error updating weekly notification time: %v", err)
 		msg := bot.NewMessage(chatID, "An error occurred while updating your settings. Please try again later.")
 		if _, err := bot.Send(msg); err != nil {
@@ -241,7 +262,7 @@ func HandleSetReminderOffset(bot common.BotAPI, db *sql.DB, chatID int64, offset
 		return
 	}
 
-	if err := updateUserPreference(db, chatID, "reminderOffset", int(offset.Minutes())); err != nil {
+	if err := UpdateUserPreference(db, chatID, "reminderOffset", "", "", int(offset.Minutes())); err != nil {
 		log.Printf("Error updating reminder offset: %v", err)
 		msg := bot.NewMessage(chatID, "An error occurred while updating your settings. Please try again later.")
 		if _, err := bot.Send(msg); err != nil {
@@ -256,22 +277,26 @@ func HandleSetReminderOffset(bot common.BotAPI, db *sql.DB, chatID int64, offset
 	}
 }
 
-func updateUserPreference(db *sql.DB, chatID int64, field string, value interface{}) error {
-	dailyTime, weeklyTime, reminderOffset, err := database.GetUserPreferences(db, chatID)
+func UpdateUserPreference(db *sql.DB, chatID int64, field string, dailyTime, weeklyTime string, reminderOffset int) error {
+	currentDailyTime, currentWeeklyTime, currentReminderOffset, err := database.GetUserPreferences(db, chatID)
 	if err != nil {
 		return err
 	}
 
 	switch field {
 	case "dailyNotificationTime":
-		dailyTime = value.(string)
+		currentDailyTime = dailyTime
 	case "weeklyNotificationTime":
-		weeklyTime = value.(string)
+		currentWeeklyTime = weeklyTime
 	case "reminderOffset":
-		reminderOffset = value.(int)
+		currentReminderOffset = reminderOffset
+	case "all":
+		return database.UpdateUserPreferences(db, chatID, dailyTime, weeklyTime, reminderOffset)
+	default:
+		return fmt.Errorf("invalid preference field: %s", field)
 	}
 
-	return database.UpdateUserPreferences(db, chatID, dailyTime, weeklyTime, reminderOffset)
+	return database.UpdateUserPreferences(db, chatID, currentDailyTime, currentWeeklyTime, currentReminderOffset)
 }
 
 func isValidDay(day string) bool {
@@ -285,28 +310,4 @@ func isValidDay(day string) bool {
 func isValidTime(timeStr string) bool {
 	_, err := time.Parse("15:04", timeStr)
 	return err == nil
-}
-
-func UpdateUserPreference(db *sql.DB, chatID int64, field string, dailyTime, weeklyTime string, reminderOffset int) error {
-	if field == "all" {
-		return database.UpdateUserPreferences(db, chatID, dailyTime, weeklyTime, reminderOffset)
-	}
-
-	currentDailyTime, currentWeeklyTime, currentReminderOffset, err := database.GetUserPreferences(db, chatID)
-	if err != nil {
-		return err
-	}
-
-	switch field {
-	case "dailyNotificationTime":
-		currentDailyTime = dailyTime
-	case "weeklyNotificationTime":
-		currentWeeklyTime = weeklyTime
-	case "reminderOffset":
-		currentReminderOffset = reminderOffset
-	default:
-		return fmt.Errorf("invalid preference field: %s", field)
-	}
-
-	return database.UpdateUserPreferences(db, chatID, currentDailyTime, currentWeeklyTime, currentReminderOffset)
 }
