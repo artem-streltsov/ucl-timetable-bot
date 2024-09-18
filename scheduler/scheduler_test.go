@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	ical "github.com/arran4/golang-ical"
 	"github.com/artem-streltsov/ucl-timetable-bot/scheduler"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	_ "github.com/mattn/go-sqlite3"
@@ -120,5 +121,80 @@ func TestScheduleWeeklySummary(t *testing.T) {
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
 
 	err = scheduler.ScheduleWeeklySummary(mockBot, db, 123456, "https://example.com/calendar")
+	assert.NoError(t, err)
+}
+
+func TestRescheduleNotificationsOnStartup(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE TABLE users (
+		chatID INTEGER PRIMARY KEY,
+		webcalURL TEXT,
+		lastDailySent DATETIME,
+		lastWeeklySent DATETIME,
+		dailyNotificationTime TEXT DEFAULT '18:00',
+		weeklyNotificationTime TEXT DEFAULT 'SUN 18:00',
+		reminderOffset INTEGER DEFAULT 30
+	)`)
+	assert.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent)
+		VALUES (?, ?, ?, ?)`, 123456, "https://example.com/calendar", "2023-05-01T12:00:00Z", "2023-05-01T12:00:00Z")
+	assert.NoError(t, err)
+
+	mockBot := new(MockBotAPI)
+	mockBot.On("NewMessage", int64(123456), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	err = scheduler.RescheduleNotificationsOnStartup(mockBot, db)
+	assert.NoError(t, err)
+}
+
+func TestScheduleLectureReminders(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(`CREATE TABLE users (
+		chatID INTEGER PRIMARY KEY,
+		webcalURL TEXT,
+		lastDailySent DATETIME,
+		lastWeeklySent DATETIME,
+		dailyNotificationTime TEXT DEFAULT '18:00',
+		weeklyNotificationTime TEXT DEFAULT 'SUN 18:00',
+		reminderOffset INTEGER DEFAULT 30
+	)`)
+	assert.NoError(t, err)
+
+	_, err = db.Exec(`INSERT INTO users (chatID, webcalURL, dailyNotificationTime, weeklyNotificationTime, reminderOffset)
+		VALUES (?, ?, ?, ?, ?)`, 123456, "https://example.com/calendar", "18:00", "SUN 18:00", 30)
+	assert.NoError(t, err)
+
+	mockBot := new(MockBotAPI)
+	mockBot.On("NewMessage", int64(123456), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	lectures := []*ical.VEvent{
+		func() *ical.VEvent {
+			event := ical.NewEvent("lecture-1")
+			event.SetProperty(ical.ComponentPropertySummary, "Test Lecture 1")
+			event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
+			event.SetProperty(ical.ComponentPropertyDtStart, "20230515T090000Z")
+			event.SetProperty(ical.ComponentPropertyDtEnd, "20230515T100000Z")
+			return event
+		}(),
+		func() *ical.VEvent {
+			event := ical.NewEvent("lecture-2")
+			event.SetProperty(ical.ComponentPropertySummary, "Test Lecture 2")
+			event.SetProperty(ical.ComponentPropertyLocation, "Room 102")
+			event.SetProperty(ical.ComponentPropertyDtStart, "20230516T130000Z")
+			event.SetProperty(ical.ComponentPropertyDtEnd, "20230516T140000Z")
+			return event
+		}(),
+	}
+
+	scheduler.ScheduleLectureReminders(mockBot, db, 123456, lectures)
 	assert.NoError(t, err)
 }
