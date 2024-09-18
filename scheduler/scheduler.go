@@ -75,8 +75,8 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User) error {
 		if err := notifications.SendWeeklySummary(bot, user.ChatID, user.WebcalURL); err != nil {
 			return fmt.Errorf("Error sending weekly summary for chatID %d: %v", user.ChatID, err)
 		}
-		if err := database.UpdateLastDailySent(db, user.ChatID, utils.CurrentTimeUTC()); err != nil {
-			return fmt.Errorf("Error updating lastDailySent: %v", err)
+		if err := database.UpdateLastWeeklySent(db, user.ChatID, utils.CurrentTimeUTC()); err != nil {
+			return fmt.Errorf("Error updating lastWeeklySent: %v", err)
 		}
 	}
 
@@ -84,8 +84,8 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User) error {
 		if err := notifications.SendDailySummary(bot, user.ChatID, user.WebcalURL); err != nil {
 			return fmt.Errorf("Error sending daily summary for chatID %d: %v", user.ChatID, err)
 		}
-		if err := database.UpdateLastWeeklySent(db, user.ChatID, utils.CurrentTimeUTC()); err != nil {
-			return fmt.Errorf("Error updating lastWeeklySent: %v", err)
+		if err := database.UpdateLastDailySent(db, user.ChatID, utils.CurrentTimeUTC()); err != nil {
+			return fmt.Errorf("Error updating lastDailySent: %v", err)
 		}
 	}
 
