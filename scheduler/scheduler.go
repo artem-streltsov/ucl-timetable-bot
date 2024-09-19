@@ -181,31 +181,35 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 	if err != nil {
 		return fmt.Errorf("error getting user preferences: %w", err)
 	}
-
-	nextWeekly, err := GetNextNotificationTime(user.LastWeeklySent, "", weeklyTime)
-	if err != nil {
-		return fmt.Errorf("error getting next weekly notification time: %w", err)
-	}
-	if nextWeekly.Before(now) {
-		if err := notifications.SendWeeklySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
-			log.Printf("Error sending missed weekly summary for chatID %d: %v", user.ChatID, err)
-		} else {
-			if err := database.UpdateLastWeeklySent(db, user.ChatID, now); err != nil {
-				log.Printf("Error updating lastWeeklySent for chatID %d: %v", user.ChatID, err)
+    
+	if !user.LastWeeklySent.IsZero() {
+		nextWeekly, err := GetNextNotificationTime(user.LastWeeklySent, "", weeklyTime)
+		if err != nil {
+			return fmt.Errorf("error getting next weekly notification time: %w", err)
+		}
+		if nextWeekly.Before(now) {
+			if err := notifications.SendWeeklySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
+				log.Printf("Error sending missed weekly summary for chatID %d: %v", user.ChatID, err)
+			} else {
+				if err := database.UpdateLastWeeklySent(db, user.ChatID, now); err != nil {
+					log.Printf("Error updating lastWeeklySent for chatID %d: %v", user.ChatID, err)
+				}
 			}
 		}
 	}
 
-	nextDaily, err := GetNextNotificationTime(user.LastDailySent, dailyTime, "")
-	if err != nil {
-		return fmt.Errorf("error getting next daily notification time: %w", err)
-	}
-	if nextDaily.Before(now) {
-		if err := notifications.SendDailySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
-			log.Printf("Error sending missed daily summary for chatID %d: %v", user.ChatID, err)
-		} else {
-			if err := database.UpdateLastDailySent(db, user.ChatID, now); err != nil {
-				log.Printf("Error updating lastDailySent for chatID %d: %v", user.ChatID, err)
+	if !user.LastDailySent.IsZero() {
+		nextDaily, err := GetNextNotificationTime(user.LastDailySent, dailyTime, "")
+		if err != nil {
+			return fmt.Errorf("error getting next daily notification time: %w", err)
+		}
+		if nextDaily.Before(now) {
+			if err := notifications.SendDailySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
+				log.Printf("Error sending missed daily summary for chatID %d: %v", user.ChatID, err)
+			} else {
+				if err := database.UpdateLastDailySent(db, user.ChatID, now); err != nil {
+					log.Printf("Error updating lastDailySent for chatID %d: %v", user.ChatID, err)
+				}
 			}
 		}
 	}
