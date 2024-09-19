@@ -192,13 +192,13 @@ func HandleSetReminderOffsetPrompt(bot common.BotAPI, chatID int64) {
 	}
 }
 
-func HandleSetDailyTime(bot common.BotAPI, db *sql.DB, chatID int64, timeStr string) {
+func HandleSetDailyTime(bot common.BotAPI, db *sql.DB, chatID int64, timeStr string) bool {
 	if _, err := time.Parse("15:04", timeStr); err != nil {
 		msg := bot.NewMessage(chatID, "Invalid time format. Please use HH:MM (24-hour format).")
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending invalid time format message: %v", err)
 		}
-		return
+		return false
 	}
 
 	if err := UpdateUserPreference(db, chatID, "dailyNotificationTime", timeStr, "", 0); err != nil {
@@ -207,23 +207,25 @@ func HandleSetDailyTime(bot common.BotAPI, db *sql.DB, chatID int64, timeStr str
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending error message: %v", err)
 		}
-		return
+		return false
 	}
 
 	msg := bot.NewMessage(chatID, fmt.Sprintf("Daily notification time updated to %s", timeStr))
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending confirmation message: %v", err)
 	}
+
+	return true
 }
 
-func HandleSetWeeklyTime(bot common.BotAPI, db *sql.DB, chatID int64, dayAndTime string) {
+func HandleSetWeeklyTime(bot common.BotAPI, db *sql.DB, chatID int64, dayAndTime string) bool {
 	parts := strings.Split(dayAndTime, " ")
 	if len(parts) != 2 {
 		msg := bot.NewMessage(chatID, "Invalid format. Please use DAY HH:MM (e.g., SUN 18:00).")
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending invalid format message: %v", err)
 		}
-		return
+		return false
 	}
 
 	day := strings.ToUpper(parts[0])
@@ -234,7 +236,7 @@ func HandleSetWeeklyTime(bot common.BotAPI, db *sql.DB, chatID int64, dayAndTime
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending invalid day or time format message: %v", err)
 		}
-		return
+		return false
 	}
 
 	if err := UpdateUserPreference(db, chatID, "weeklyNotificationTime", "", fmt.Sprintf("%s %s", day, timeStr), 0); err != nil {
@@ -243,23 +245,25 @@ func HandleSetWeeklyTime(bot common.BotAPI, db *sql.DB, chatID int64, dayAndTime
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending error message: %v", err)
 		}
-		return
+		return false
 	}
 
 	msg := bot.NewMessage(chatID, fmt.Sprintf("Weekly notification time updated to %s %s", day, timeStr))
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending confirmation message: %v", err)
 	}
+
+	return true
 }
 
-func HandleSetReminderOffset(bot common.BotAPI, db *sql.DB, chatID int64, offsetStr string) {
+func HandleSetReminderOffset(bot common.BotAPI, db *sql.DB, chatID int64, offsetStr string) bool {
 	offset, err := time.ParseDuration(offsetStr + "m")
 	if err != nil || offset < 0 {
 		msg := bot.NewMessage(chatID, "Invalid offset. Please provide a positive number of minutes.")
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending invalid offset message: %v", err)
 		}
-		return
+		return false
 	}
 
 	if err := UpdateUserPreference(db, chatID, "reminderOffset", "", "", int(offset.Minutes())); err != nil {
@@ -268,13 +272,15 @@ func HandleSetReminderOffset(bot common.BotAPI, db *sql.DB, chatID int64, offset
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending error message: %v", err)
 		}
-		return
+		return false
 	}
 
 	msg := bot.NewMessage(chatID, fmt.Sprintf("Reminder offset updated to %d minutes", int(offset.Minutes())))
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending confirmation message: %v", err)
 	}
+
+	return true
 }
 
 func UpdateUserPreference(db *sql.DB, chatID int64, field string, dailyTime, weeklyTime string, reminderOffset int) error {

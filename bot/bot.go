@@ -74,21 +74,33 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 						b.state[chatID] = "set_daily_time"
 						handlers.HandleSetDailyTimePrompt(b.api, chatID)
 					} else {
-						handlers.HandleSetDailyTime(b.api, db, chatID, args)
+						if !handlers.HandleSetDailyTime(b.api, db, chatID, args) {
+							b.state[chatID] = "set_daily_time"
+						} else {
+							delete(b.state, chatID)
+						}
 					}
 				case "set_weekly_time":
 					if args == "" {
 						b.state[chatID] = "set_weekly_time"
 						handlers.HandleSetWeeklyTimePrompt(b.api, chatID)
 					} else {
-						handlers.HandleSetWeeklyTime(b.api, db, chatID, args)
+						if !handlers.HandleSetWeeklyTime(b.api, db, chatID, args) {
+							b.state[chatID] = "set_weekly_time"
+						} else {
+							delete(b.state, chatID)
+						}
 					}
 				case "set_reminder_offset":
 					if args == "" {
 						b.state[chatID] = "set_reminder_offset"
 						handlers.HandleSetReminderOffsetPrompt(b.api, chatID)
 					} else {
-						handlers.HandleSetReminderOffset(b.api, db, chatID, args)
+						if !handlers.HandleSetReminderOffset(b.api, db, chatID, args) {
+							b.state[chatID] = "set_reminder_offset"
+						} else {
+							delete(b.state, chatID)
+						}
 					}
 				default:
 					msg := b.api.NewMessage(chatID, "Unknown command. Please use /settings to see available commands.")
@@ -98,13 +110,24 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 				if state, ok := b.state[chatID]; ok {
 					switch state {
 					case "set_daily_time":
-						handlers.HandleSetDailyTime(b.api, db, chatID, update.Message.Text)
+						if !handlers.HandleSetDailyTime(b.api, db, chatID, update.Message.Text) {
+							b.state[chatID] = "set_daily_time"
+						} else {
+							delete(b.state, chatID)
+						}
 					case "set_weekly_time":
-						handlers.HandleSetWeeklyTime(b.api, db, chatID, update.Message.Text)
+						if !handlers.HandleSetWeeklyTime(b.api, db, chatID, update.Message.Text) {
+							b.state[chatID] = "set_weekly_time"
+						} else {
+							delete(b.state, chatID)
+						}
 					case "set_reminder_offset":
-						handlers.HandleSetReminderOffset(b.api, db, chatID, update.Message.Text)
+						if !handlers.HandleSetReminderOffset(b.api, db, chatID, update.Message.Text) {
+							b.state[chatID] = "set_reminder_offset"
+						} else {
+							delete(b.state, chatID)
+						}
 					}
-					delete(b.state, chatID)
 				} else if strings.HasPrefix(strings.ToLower(update.Message.Text), "webcal://") {
 					handlers.HandleWebCalLink(b.api, db, chatID, update.Message.Text)
 					if err := setDefaultPreferences(db, chatID); err != nil {
