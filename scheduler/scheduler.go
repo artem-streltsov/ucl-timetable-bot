@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,7 +22,10 @@ func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL
 		return fmt.Errorf("error getting user preferences: %w", err)
 	}
 
-	nextDaily := GetNextNotificationTime(now, dailyNotificationTime, "")
+	nextDaily, err := GetNextNotificationTime(now, dailyNotificationTime, "")
+	if err != nil {
+		return fmt.Errorf("error calculating next daily notification time: %w", err)
+	}
 	durationUntilNextDaily := nextDaily.Sub(now)
 
 	time.AfterFunc(durationUntilNextDaily, func() {
@@ -46,7 +50,10 @@ func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalUR
 		return fmt.Errorf("error getting user preferences: %w", err)
 	}
 
-	nextWeekly := GetNextNotificationTime(now, "", weeklyNotificationTime)
+	nextWeekly, err := GetNextNotificationTime(now, "", weeklyNotificationTime)
+	if err != nil {
+		return fmt.Errorf("error calculating next weekly notification time: %w", err)
+	}
 	durationUntilNextWeekly := nextWeekly.Sub(now)
 
 	time.AfterFunc(durationUntilNextWeekly, func() {
@@ -64,51 +71,71 @@ func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalUR
 	return nil
 }
 
-func GetNextNotificationTime(now time.Time, dailyTime, weeklyTime string) time.Time {
+func GetNextNotificationTime(now time.Time, dailyTime, weeklyTime string) (time.Time, error) {
 	if dailyTime != "" {
 		return getNextDailyTime(now, dailyTime)
 	}
 	return getNextWeeklyTime(now, weeklyTime)
 }
 
-func getNextDailyTime(now time.Time, dailyTime string) time.Time {
-	if now.IsZero() {
-		now = time.Now()
+func getNextDailyTime(now time.Time, dailyTime string) (time.Time, error) {
+	timeParts := strings.Split(dailyTime, ":")
+	if len(timeParts) != 2 {
+		return time.Time{}, fmt.Errorf("invalid time format")
 	}
 
-	timeParts := strings.Split(dailyTime, ":")
-	hour, _ := time.Parse("15", timeParts[0])
-	minute, _ := time.Parse("04", timeParts[1])
+	hour, err := strconv.Atoi(timeParts[0])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid hour: %v", err)
+	}
+	minute, err := strconv.Atoi(timeParts[1])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid minute: %v", err)
+	}
 
-	nextDaily := time.Date(now.Year(), now.Month(), now.Day(), hour.Hour(), minute.Minute(), 0, 0, time.UTC)
+	nextDaily := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
 	if nextDaily.Before(now) {
 		nextDaily = nextDaily.AddDate(0, 0, 1)
 	}
-	return nextDaily
+	return nextDaily, nil
 }
 
-func getNextWeeklyTime(now time.Time, weeklyTime string) time.Time {
-	if now.IsZero() {
-		now = time.Now()
+func getNextWeeklyTime(now time.Time, weeklyTime string) (time.Time, error) {
+	if weeklyTime == "" {
+		return time.Time{}, fmt.Errorf("weekly time is empty")
 	}
 
 	parts := strings.Split(weeklyTime, " ")
+	if len(parts) != 2 {
+		return time.Time{}, fmt.Errorf("invalid weekly time format")
+	}
+
 	dayStr, timeStr := parts[0], parts[1]
 	timeParts := strings.Split(timeStr, ":")
-	hour, _ := time.Parse("15", timeParts[0])
-	minute, _ := time.Parse("04", timeParts[1])
+	if len(timeParts) != 2 {
+		return time.Time{}, fmt.Errorf("invalid time format in weekly time")
+	}
+
+	hour, err := strconv.Atoi(timeParts[0])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid hour in weekly time: %v", err)
+	}
+	minute, err := strconv.Atoi(timeParts[1])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid minute in weekly time: %v", err)
+	}
 
 	targetWeekday := getWeekday(dayStr)
 	daysUntilTarget := (int(targetWeekday) - int(now.Weekday()) + 7) % 7
 
-	nextWeekly := time.Date(now.Year(), now.Month(), now.Day(), hour.Hour(), minute.Minute(), 0, 0, time.UTC)
+	nextWeekly := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
 	nextWeekly = nextWeekly.AddDate(0, 0, daysUntilTarget)
 
 	if nextWeekly.Before(now) {
 		nextWeekly = nextWeekly.AddDate(0, 0, 7)
 	}
 
-	return nextWeekly
+	return nextWeekly, nil
 }
 
 func getWeekday(day string) time.Weekday {
@@ -155,7 +182,10 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 		return fmt.Errorf("error getting user preferences: %w", err)
 	}
 
-	nextWeekly := GetNextNotificationTime(user.LastWeeklySent, "", weeklyTime)
+	nextWeekly, err := GetNextNotificationTime(user.LastWeeklySent, "", weeklyTime)
+	if err != nil {
+		return fmt.Errorf("error getting next weekly notification time: %w", err)
+	}
 	if nextWeekly.Before(now) {
 		if err := notifications.SendWeeklySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
 			log.Printf("Error sending missed weekly summary for chatID %d: %v", user.ChatID, err)
@@ -166,7 +196,10 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 		}
 	}
 
-	nextDaily := GetNextNotificationTime(user.LastDailySent, dailyTime, "")
+	nextDaily, err := GetNextNotificationTime(user.LastDailySent, dailyTime, "")
+	if err != nil {
+		return fmt.Errorf("error getting next daily notification time: %w", err)
+	}
 	if nextDaily.Before(now) {
 		if err := notifications.SendDailySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
 			log.Printf("Error sending missed daily summary for chatID %d: %v", user.ChatID, err)
@@ -178,14 +211,12 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 	}
 
 	if err := ScheduleDailySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
-		return fmt.Errorf("error scheduling daily summary: %w", err)
+		log.Printf("Error scheduling daily summary for chatID %d: %v", user.ChatID, err)
 	}
-
 	if err := ScheduleWeeklySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
-		return fmt.Errorf("error scheduling weekly summary: %w", err)
+		log.Printf("Error scheduling weekly summary for chatID %d: %v", user.ChatID, err)
 	}
 
-	log.Printf("Rescheduled notifications for chatID %d", user.ChatID)
 	return nil
 }
 

@@ -62,7 +62,8 @@ func TestGetNextNotificationTime(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := scheduler.GetNextNotificationTime(tc.now, tc.dailyTime, tc.weeklyTime)
+			result, err := scheduler.GetNextNotificationTime(tc.now, tc.dailyTime, tc.weeklyTime)
+			assert.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
