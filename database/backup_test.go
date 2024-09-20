@@ -1,4 +1,4 @@
-package database
+package database_test
 
 import (
 	"database/sql"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/artem-streltsov/ucl-timetable-bot/config"
+	"github.com/artem-streltsov/ucl-timetable-bot/database"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,7 +24,7 @@ func TestInitBackupManager(t *testing.T) {
 	}
 
 	t.Run("Valid initialization", func(t *testing.T) {
-		bm, err := InitBackupManager(db, cfg)
+		bm, err := database.InitBackupManager(db, cfg)
 		assert.NoError(t, err)
 		assert.NotNil(t, bm)
 		assert.Equal(t, db, bm.DB)
@@ -31,14 +32,14 @@ func TestInitBackupManager(t *testing.T) {
 	})
 
 	t.Run("Nil database", func(t *testing.T) {
-		bm, err := InitBackupManager(nil, cfg)
+		bm, err := database.InitBackupManager(nil, cfg)
 		assert.Error(t, err)
 		assert.Nil(t, bm)
 		assert.Contains(t, err.Error(), "database is nil")
 	})
 
 	t.Run("Nil config", func(t *testing.T) {
-		bm, err := InitBackupManager(db, nil)
+		bm, err := database.InitBackupManager(db, nil)
 		assert.Error(t, err)
 		assert.Nil(t, bm)
 		assert.Contains(t, err.Error(), "config is nil")
@@ -63,7 +64,7 @@ func TestPerformBackup(t *testing.T) {
 		BackupIntervalHours: 24,
 	}
 
-	bm, err := InitBackupManager(db, cfg)
+	bm, err := database.InitBackupManager(db, cfg)
 	assert.NoError(t, err)
 
 	t.Run("Successful backup", func(t *testing.T) {
@@ -85,7 +86,7 @@ func TestPerformBackup(t *testing.T) {
 			BackupDirectory:     "/invalid/directory",
 			BackupIntervalHours: 24,
 		}
-		invalidBm, _ := InitBackupManager(db, invalidCfg)
+		invalidBm, _ := database.InitBackupManager(db, invalidCfg)
 
 		err := invalidBm.PerformBackup()
 		assert.Error(t, err)
@@ -94,7 +95,7 @@ func TestPerformBackup(t *testing.T) {
 }
 
 type TestBackupManager struct {
-	BackupManager
+	database.BackupManager
 	backupCount int
 	mu          sync.Mutex
 }
@@ -131,7 +132,7 @@ func TestStartBackups(t *testing.T) {
 		BackupIntervalHours: 1,
 	}
 
-	bm, err := InitBackupManager(db, cfg)
+	bm, err := database.InitBackupManager(db, cfg)
 	assert.NoError(t, err)
 
 	bm.StartBackups()
