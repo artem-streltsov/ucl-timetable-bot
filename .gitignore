@@ -26,3 +26,4 @@ go.work.sum
 
 # database file
 *.db
+backups/

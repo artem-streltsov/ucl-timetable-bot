@@ -25,6 +25,11 @@ func main() {
 	}
 	defer db.Close()
 
+	backupManager, err := database.InitBackupManager(db, cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize backup manager: %v", err)
+	}
+
 	bot, err := bot.InitBot(cfg.TelegramBotToken, db)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
@@ -41,6 +46,9 @@ func main() {
 		}
 	}()
 
+	log.Println("Starting scheduled backups...")
+	backupManager.StartBackups()
+
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -51,5 +59,11 @@ func main() {
 		log.Println("Context canceled")
 	}
 
-	log.Println("Shutting down gracefully...")
+	if err := backupManager.PerformBackup(); err != nil {
+		log.Printf("Error performing final backup: %v", err)
+	} else {
+		log.Println("Final backup completed successfully")
+	}
+
+	log.Println("Shutting down...")
 }

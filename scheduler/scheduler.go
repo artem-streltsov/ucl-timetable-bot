@@ -181,7 +181,7 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 	if err != nil {
 		return fmt.Errorf("error getting user preferences: %w", err)
 	}
-    
+
 	if !user.LastWeeklySent.IsZero() {
 		nextWeekly, err := GetNextNotificationTime(user.LastWeeklySent, "", weeklyTime)
 		if err != nil {
