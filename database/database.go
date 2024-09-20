@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -38,24 +41,29 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, fmt.Errorf("error opening database file: %w", err)
 	}
 
-	createTableSQL := `
-    CREATE TABLE IF NOT EXISTS users (
-        chatID INTEGER PRIMARY KEY,
-        webcalURL TEXT,
-        lastDailySent DATETIME,
-        lastWeeklySent DATETIME,
-        dailyNotificationTime TEXT DEFAULT '18:00',
-        weeklyNotificationTime TEXT DEFAULT 'SUN 18:00',
-        reminderOffset INTEGER DEFAULT 30
-    );
-    `
-
-	_, err = db.Exec(createTableSQL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create users table: %w", err)
+	if err := runMigrations(db); err != nil {
+		return nil, fmt.Errorf("error running migrations: %w", err)
 	}
 
 	return db, nil
+}
+
+func runMigrations(db *sql.DB) error {
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
+	if err != nil {
+		return fmt.Errorf("could not create driver: %w", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance("file://migrations", "sqlite3", driver)
+	if err != nil {
+		return fmt.Errorf("could not create migrate instance: %w", err)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("could not run migrations: %w", err)
+	}
+
+	return nil
 }
 
 func InsertUser(db *sql.DB, chatID int64, webcalURL string) error {

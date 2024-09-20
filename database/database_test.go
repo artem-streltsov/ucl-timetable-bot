@@ -1,40 +1,67 @@
 package database_test
 
 import (
+	"database/sql"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/artem-streltsov/ucl-timetable-bot/database"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const testDBPath = "./testdata/test.db"
 
-func TestInitDB(t *testing.T) {
-	defer os.Remove(testDBPath)
+func setupTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	os.Remove(testDBPath)
 
-	db, err := database.InitDB(testDBPath)
-	assert.NoError(t, err)
-	assert.NotNil(t, db)
+	dir := filepath.Dir(testDBPath)
+	err := os.MkdirAll(dir, 0755)
+	require.NoError(t, err)
 
-	_, err = os.Stat(testDBPath)
-	assert.NoError(t, err)
+	db, err := sql.Open("sqlite3", testDBPath)
+	require.NoError(t, err)
 
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
+	require.NoError(t, err)
+
+	m, err := migrate.NewWithDatabaseInstance("file://../migrations", "sqlite3", driver)
+	require.NoError(t, err)
+
+	err = m.Up()
+	require.NoError(t, err)
+
+	return db
+}
+
+func teardownTestDB(t *testing.T, db *sql.DB) {
+	t.Helper()
 	db.Close()
+	os.Remove(testDBPath)
+}
+
+func TestInitDB(t *testing.T) {
+	db := setupTestDB(t)
+	defer teardownTestDB(t, db)
+
+	_, err := os.Stat(testDBPath)
+	assert.NoError(t, err)
 }
 
 func TestInsertAndGetUser(t *testing.T) {
-	defer os.Remove(testDBPath)
-
-	db, err := database.InitDB(testDBPath)
-	assert.NoError(t, err)
-	defer db.Close()
+	db := setupTestDB(t)
+	defer teardownTestDB(t, db)
 
 	chatID := int64(123456)
 	webcalURL := "https://example.com/calendar"
 
-	err = database.InsertUser(db, chatID, webcalURL)
+	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
 	retrievedURL, err := database.GetWebCalURL(db, chatID)
@@ -43,16 +70,13 @@ func TestInsertAndGetUser(t *testing.T) {
 }
 
 func TestGetLastSentTimes(t *testing.T) {
-	defer os.Remove(testDBPath)
-
-	db, err := database.InitDB(testDBPath)
-	assert.NoError(t, err)
-	defer db.Close()
+	db := setupTestDB(t)
+	defer teardownTestDB(t, db)
 
 	chatID := int64(123456)
 	webcalURL := "https://example.com/calendar"
 
-	err = database.InsertUser(db, chatID, webcalURL)
+	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
 	now := time.Now().UTC()
@@ -73,16 +97,13 @@ func TestGetLastSentTimes(t *testing.T) {
 }
 
 func TestGetUserPreferences(t *testing.T) {
-	defer os.Remove(testDBPath)
-
-	db, err := database.InitDB(testDBPath)
-	assert.NoError(t, err)
-	defer db.Close()
+	db := setupTestDB(t)
+	defer teardownTestDB(t, db)
 
 	chatID := int64(123456)
 	webcalURL := "https://example.com/calendar"
 
-	err = database.InsertUser(db, chatID, webcalURL)
+	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
 	dailyTime, weeklyTime, offset, err := database.GetUserPreferences(db, chatID)
@@ -102,11 +123,8 @@ func TestGetUserPreferences(t *testing.T) {
 }
 
 func TestGetAllUsers(t *testing.T) {
-	defer os.Remove(testDBPath)
-
-	db, err := database.InitDB(testDBPath)
-	assert.NoError(t, err)
-	defer db.Close()
+	db := setupTestDB(t)
+	defer teardownTestDB(t, db)
 
 	users := []struct {
 		chatID    int64
@@ -117,7 +135,7 @@ func TestGetAllUsers(t *testing.T) {
 	}
 
 	for _, user := range users {
-		err = database.InsertUser(db, user.chatID, user.webcalURL)
+		err := database.InsertUser(db, user.chatID, user.webcalURL)
 		assert.NoError(t, err)
 	}
 
@@ -132,15 +150,12 @@ func TestGetAllUsers(t *testing.T) {
 }
 
 func TestUpdateLastDailySent(t *testing.T) {
-	defer os.Remove(testDBPath)
-
-	db, err := database.InitDB(testDBPath)
-	assert.NoError(t, err)
-	defer db.Close()
+	db := setupTestDB(t)
+	defer teardownTestDB(t, db)
 
 	chatID := int64(123456)
 	webcalURL := "https://example.com/calendar"
-	err = database.InsertUser(db, chatID, webcalURL)
+	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
 	now := time.Now()
@@ -154,15 +169,12 @@ func TestUpdateLastDailySent(t *testing.T) {
 }
 
 func TestUpdateLastWeeklySent(t *testing.T) {
-	defer os.Remove(testDBPath)
-
-	db, err := database.InitDB(testDBPath)
-	assert.NoError(t, err)
-	defer db.Close()
+	db := setupTestDB(t)
+	defer teardownTestDB(t, db)
 
 	chatID := int64(123456)
 	webcalURL := "https://example.com/calendar"
-	err = database.InsertUser(db, chatID, webcalURL)
+	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
 	now := time.Now()
@@ -176,16 +188,13 @@ func TestUpdateLastWeeklySent(t *testing.T) {
 }
 
 func TestUpdateUserPreferences(t *testing.T) {
-	defer os.Remove(testDBPath)
-
-	db, err := database.InitDB(testDBPath)
-	assert.NoError(t, err)
-	defer db.Close()
+	db := setupTestDB(t)
+	defer teardownTestDB(t, db)
 
 	chatID := int64(123456)
 	webcalURL := "https://example.com/calendar"
 
-	err = database.InsertUser(db, chatID, webcalURL)
+	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
 	err = database.UpdateUserPreferences(db, chatID, "07:30", "SAT 09:00", 20)
