@@ -108,7 +108,7 @@ func TestGetUserPreferences(t *testing.T) {
 
 	dailyTime, weeklyTime, offset, err := database.GetUserPreferences(db, chatID)
 	assert.NoError(t, err)
-	assert.Equal(t, "18:00", dailyTime)
+	assert.Equal(t, "07:00", dailyTime)
 	assert.Equal(t, "SUN 18:00", weeklyTime)
 	assert.Equal(t, 30, offset)
 
