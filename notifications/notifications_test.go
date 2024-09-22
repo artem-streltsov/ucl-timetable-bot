@@ -9,6 +9,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	ical "github.com/arran4/golang-ical"
 	"github.com/artem-streltsov/ucl-timetable-bot/notifications"
+	"github.com/artem-streltsov/ucl-timetable-bot/utils"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -40,15 +41,26 @@ func TestFormatEventDetails(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "Complete event",
+			name: "Winter time (GMT)",
 			event: func() *ical.VEvent {
 				event := ical.NewEvent("test-event")
 				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture")
 				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
-				event.SetProperty(ical.ComponentPropertyDtStart, "20230515T090000Z")
+				event.SetProperty(ical.ComponentPropertyDtStart, "20230115T090000Z") // January 15, 2023 (winter)
 				return event
 			}(),
 			expected: "- Test Lecture at Room 101, starting at 09:00",
+		},
+		{
+			name: "Summer time (BST)",
+			event: func() *ical.VEvent {
+				event := ical.NewEvent("test-event")
+				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture")
+				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
+				event.SetProperty(ical.ComponentPropertyDtStart, "20230615T090000Z") // June 15, 2023 (summer)
+				return event
+			}(),
+			expected: "- Test Lecture at Room 101, starting at 10:00",
 		},
 		{
 			name: "Missing summary",
@@ -58,7 +70,7 @@ func TestFormatEventDetails(t *testing.T) {
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230515T090000Z")
 				return event
 			}(),
-			expected: "- Unknown at Room 101, starting at 09:00",
+			expected: "- Unknown at Room 101, starting at 10:00",
 		},
 		{
 			name: "Missing location",
@@ -68,7 +80,7 @@ func TestFormatEventDetails(t *testing.T) {
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230515T090000Z")
 				return event
 			}(),
-			expected: "- Test Lecture at Unknown, starting at 09:00",
+			expected: "- Test Lecture at Unknown, starting at 10:00",
 		},
 		{
 			name: "Missing start time",
@@ -97,8 +109,8 @@ func createTestCalendar() *ical.Calendar {
 	event.SetCreatedTime(time.Now())
 	event.SetDtStampTime(time.Now())
 	event.SetModifiedAt(time.Now())
-	event.SetStartAt(time.Now())
-	event.SetEndAt(time.Now().Add(time.Hour))
+	event.SetStartAt(time.Now().In(utils.GetUKLocation()))
+	event.SetEndAt(time.Now().In(utils.GetUKLocation()).Add(time.Hour))
 	event.SetSummary("Test Event")
 	event.SetLocation("Test Location")
 	return cal
@@ -176,7 +188,7 @@ func TestSendReminder(t *testing.T) {
 	event := ical.NewEvent("test-event")
 	event.SetProperty(ical.ComponentPropertySummary, "Test Lecture")
 	event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
-	event.SetProperty(ical.ComponentPropertyDtStart, time.Now().Add(30*time.Minute).Format("20060102T150405Z"))
+	event.SetProperty(ical.ComponentPropertyDtStart, time.Now().In(utils.GetUKLocation()).Add(30*time.Minute).Format("20060102T150405Z"))
 
 	mockBot.On("NewMessage", chatID, mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)

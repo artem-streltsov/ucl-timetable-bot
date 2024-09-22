@@ -181,7 +181,7 @@ func TestHandleSettingsCommand(t *testing.T) {
 
 func TestHandleSetDailyTimePrompt(t *testing.T) {
 	mockBot := SetupMockBot()
-	mockBot.On("NewMessage", int64(123), "Please enter the time for daily notifications in HH:MM format (24-hour).").Return(tgbotapi.MessageConfig{})
+	mockBot.On("NewMessage", int64(123), "Please enter the time for daily notifications in HH:MM format (24-hour). All times are in UK time.").Return(tgbotapi.MessageConfig{})
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
 
 	handlers.HandleSetDailyTimePrompt(mockBot, 123)
@@ -191,7 +191,7 @@ func TestHandleSetDailyTimePrompt(t *testing.T) {
 
 func TestHandleSetWeeklyTimePrompt(t *testing.T) {
 	mockBot := SetupMockBot()
-	mockBot.On("NewMessage", int64(123), "Please enter the day and time for weekly notifications in the format DAY HH:MM (e.g., SUN 18:00).").Return(tgbotapi.MessageConfig{})
+	mockBot.On("NewMessage", int64(123), "Please enter the day and time for weekly notifications in the format DAY HH:MM (e.g., SUN 18:00). All times are in UK time.").Return(tgbotapi.MessageConfig{})
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
 
 	handlers.HandleSetWeeklyTimePrompt(mockBot, 123)

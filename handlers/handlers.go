@@ -164,7 +164,7 @@ func HandleSettingsCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
 		return
 	}
 
-	settingsMessage := fmt.Sprintf("Current Settings:\n"+
+	settingsMessage := fmt.Sprintf("Current Settings (all times are in UK time):\n"+
 		"Daily Notification Time: %s\n"+
 		"Weekly Notification Time: %s\n"+
 		"Reminder Offset: %d minutes\n\n"+
@@ -181,14 +181,14 @@ func HandleSettingsCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
 }
 
 func HandleSetDailyTimePrompt(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please enter the time for daily notifications in HH:MM format (24-hour).")
+	msg := bot.NewMessage(chatID, "Please enter the time for daily notifications in HH:MM format (24-hour). All times are in UK time.")
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending daily time prompt: %v", err)
 	}
 }
 
 func HandleSetWeeklyTimePrompt(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please enter the day and time for weekly notifications in the format DAY HH:MM (e.g., SUN 18:00).")
+	msg := bot.NewMessage(chatID, "Please enter the day and time for weekly notifications in the format DAY HH:MM (e.g., SUN 18:00). All times are in UK time.")
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending weekly time prompt: %v", err)
 	}
@@ -228,7 +228,7 @@ func HandleSetDailyTime(bot common.BotAPI, db *sql.DB, chatID int64, timeStr str
 		return false
 	}
 
-	msg := bot.NewMessage(chatID, fmt.Sprintf("Daily notification time updated to %s", timeStr))
+	msg := bot.NewMessage(chatID, fmt.Sprintf("Daily notification time updated to %s (UK time)", timeStr))
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending confirmation message: %v", err)
 	}
@@ -275,7 +275,7 @@ func HandleSetWeeklyTime(bot common.BotAPI, db *sql.DB, chatID int64, dayAndTime
 		return false
 	}
 
-	msg := bot.NewMessage(chatID, fmt.Sprintf("Weekly notification time updated to %s %s", day, timeStr))
+	msg := bot.NewMessage(chatID, fmt.Sprintf("Weekly notification time updated to %s %s (UK time)", day, timeStr))
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending confirmation message: %v", err)
 	}

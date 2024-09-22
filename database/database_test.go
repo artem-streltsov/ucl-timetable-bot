@@ -79,7 +79,7 @@ func TestGetLastSentTimes(t *testing.T) {
 	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
-	now := utils.CurrentTimeUTC()
+	now := utils.CurrentTimeUK()
 	nowEpoch := utils.TimeToEpoch(now)
 
 	err = database.UpdateLastDailySent(db, chatID, nowEpoch)
@@ -161,7 +161,7 @@ func TestUpdateLastDailySent(t *testing.T) {
 	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
-	now := utils.CurrentTimeUTC()
+	now := utils.CurrentTimeUK()
 	nowEpoch := utils.TimeToEpoch(now)
 
 	err = database.UpdateLastDailySent(db, chatID, nowEpoch)
@@ -181,7 +181,7 @@ func TestUpdateLastWeeklySent(t *testing.T) {
 	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
-	now := utils.CurrentTimeUTC()
+	now := utils.CurrentTimeUK()
 	nowEpoch := utils.TimeToEpoch(now)
 
 	err = database.UpdateLastWeeklySent(db, chatID, nowEpoch)

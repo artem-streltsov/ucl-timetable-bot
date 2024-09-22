@@ -58,21 +58,21 @@ func TestGetNextNotificationTime(t *testing.T) {
 	}{
 		{
 			name:      "Daily notification",
-			now:       time.Date(2023, 5, 15, 12, 0, 0, 0, time.UTC),
+			now:       time.Date(2023, 5, 15, 12, 0, 0, 0, utils.GetUKLocation()),
 			dailyTime: "18:00",
-			expected:  time.Date(2023, 5, 15, 18, 0, 0, 0, time.UTC),
+			expected:  time.Date(2023, 5, 15, 18, 0, 0, 0, utils.GetUKLocation()),
 		},
 		{
 			name:       "Weekly notification",
-			now:        time.Date(2023, 5, 15, 12, 0, 0, 0, time.UTC),
+			now:        time.Date(2023, 5, 15, 12, 0, 0, 0, utils.GetUKLocation()),
 			weeklyTime: "SUN 10:00",
-			expected:   time.Date(2023, 5, 21, 10, 0, 0, 0, time.UTC),
+			expected:   time.Date(2023, 5, 21, 10, 0, 0, 0, utils.GetUKLocation()),
 		},
 		{
 			name:      "Next day daily notification",
-			now:       time.Date(2023, 5, 15, 19, 0, 0, 0, time.UTC),
+			now:       time.Date(2023, 5, 15, 19, 0, 0, 0, utils.GetUKLocation()),
 			dailyTime: "18:00",
-			expected:  time.Date(2023, 5, 16, 18, 0, 0, 0, time.UTC),
+			expected:  time.Date(2023, 5, 16, 18, 0, 0, 0, utils.GetUKLocation()),
 		},
 	}
 
@@ -117,8 +117,7 @@ func TestRescheduleNotificationsOnStartup(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
-	// Use epoch time for lastDailySent and lastWeeklySent
-	lastSentTime := time.Date(2023, 5, 1, 12, 0, 0, 0, time.UTC)
+	lastSentTime := time.Date(2023, 5, 1, 12, 0, 0, 0, utils.GetUKLocation())
 	lastSentEpoch := utils.TimeToEpoch(lastSentTime)
 
 	_, err := db.Exec(`INSERT INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent)

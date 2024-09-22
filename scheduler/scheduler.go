@@ -70,7 +70,7 @@ func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
 		return fmt.Errorf("error getting user webcal url: %v", err)
 	}
 
-	now := utils.CurrentTimeUTC()
+	now := utils.CurrentTimeUK()
 	dailyNotificationTime, _, _, err := database.GetUserPreferences(db, chatID)
 	if err != nil {
 		return fmt.Errorf("error getting user preferences: %w", err)
@@ -90,7 +90,7 @@ func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
 		if err := notifications.SendDailySummary(bot, db, chatID, webcalURL); err != nil {
 			log.Printf("Error sending daily summary: %v", err)
 		}
-		if err := database.UpdateLastDailySent(db, chatID, utils.TimeToEpoch(utils.CurrentTimeUTC())); err != nil {
+		if err := database.UpdateLastDailySent(db, chatID, utils.TimeToEpoch(utils.CurrentTimeUK())); err != nil {
 			log.Printf("Error updating lastDailySent: %v", err)
 		}
 		if err := ScheduleDailySummary(bot, db, chatID); err != nil {
@@ -107,7 +107,7 @@ func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
 		return fmt.Errorf("error getting user webcal url: %v", err)
 	}
 
-	now := utils.CurrentTimeUTC()
+	now := utils.CurrentTimeUK()
 	_, weeklyNotificationTime, _, err := database.GetUserPreferences(db, chatID)
 	if err != nil {
 		return fmt.Errorf("error getting user preferences: %w", err)
@@ -127,7 +127,7 @@ func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
 		if err := notifications.SendWeeklySummary(bot, db, chatID, webcalURL); err != nil {
 			log.Printf("Error sending weekly summary: %v", err)
 		}
-		if err := database.UpdateLastWeeklySent(db, chatID, utils.TimeToEpoch(utils.CurrentTimeUTC())); err != nil {
+		if err := database.UpdateLastWeeklySent(db, chatID, utils.TimeToEpoch(utils.CurrentTimeUK())); err != nil {
 			log.Printf("Error updating lastWeeklySent: %v", err)
 		}
 		if err := ScheduleWeeklySummary(bot, db, chatID); err != nil {
@@ -160,7 +160,7 @@ func getNextDailyTime(now time.Time, dailyTime string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("invalid minute: %v", err)
 	}
 
-	nextDaily := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
+	nextDaily := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, utils.GetUKLocation())
 	if nextDaily.Before(now) {
 		nextDaily = nextDaily.AddDate(0, 0, 1)
 	}
@@ -195,7 +195,7 @@ func getNextWeeklyTime(now time.Time, weeklyTime string) (time.Time, error) {
 	targetWeekday := getWeekday(dayStr)
 	daysUntilTarget := (int(targetWeekday) - int(now.Weekday()) + 7) % 7
 
-	nextWeekly := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
+	nextWeekly := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, utils.GetUKLocation())
 	nextWeekly = nextWeekly.AddDate(0, 0, daysUntilTarget)
 
 	if nextWeekly.Before(now) {
@@ -232,7 +232,7 @@ func RescheduleNotificationsOnStartup(bot common.BotAPI, db *sql.DB) error {
 		return fmt.Errorf("error fetching users: %w", err)
 	}
 
-	now := utils.CurrentTimeUTC()
+	now := utils.CurrentTimeUK()
 
 	for _, user := range users {
 		if err := handleReschedule(bot, db, user, now); err != nil {
@@ -250,7 +250,7 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 	}
 
 	if !utils.IsZeroEpoch(user.LastWeeklySent) {
-		lastWeeklySentTime := utils.EpochToTime(user.LastWeeklySent)
+		lastWeeklySentTime := utils.EpochToTimeUK(user.LastWeeklySent)
 		nextWeekly, err := GetNextNotificationTime(lastWeeklySentTime, "", weeklyTime)
 		if err != nil {
 			return fmt.Errorf("error getting next weekly notification time: %w", err)
@@ -267,7 +267,7 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 	}
 
 	if !utils.IsZeroEpoch(user.LastDailySent) {
-		lastDailySentTime := utils.EpochToTime(user.LastDailySent)
+		lastDailySentTime := utils.EpochToTimeUK(user.LastDailySent)
 		nextDaily, err := GetNextNotificationTime(lastDailySentTime, dailyTime, "")
 		if err != nil {
 			return fmt.Errorf("error getting next daily notification time: %w", err)
@@ -287,7 +287,11 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 }
 
 func ParseLectureStartTime(lecture *ical.VEvent) (time.Time, error) {
-	return time.Parse("20060102T150405Z", lecture.GetProperty("DTSTART").Value)
+	t, err := time.Parse("20060102T150405Z", lecture.GetProperty("DTSTART").Value)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return t.In(utils.GetUKLocation()), nil
 }
 
 func ShouldScheduleReminder(reminderTime time.Time) bool {

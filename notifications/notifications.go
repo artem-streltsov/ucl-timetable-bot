@@ -12,10 +12,11 @@ import (
 	ical "github.com/arran4/golang-ical"
 	"github.com/artem-streltsov/ucl-timetable-bot/common"
 	"github.com/artem-streltsov/ucl-timetable-bot/database"
+	"github.com/artem-streltsov/ucl-timetable-bot/utils"
 )
 
 func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
-	today := time.Now().UTC().Format("20060102")
+	today := utils.CurrentTimeUK().Format("20060102")
 	lectures := []*ical.VEvent{}
 	for _, event := range calendar.Events() {
 		start := event.GetProperty(ical.ComponentPropertyDtStart)
@@ -57,7 +58,7 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 		return nil
 	}
 
-	message := fmt.Sprintf("Today's Lectures (Daily notification at %s, Reminder %d minutes before):\n", dailyNotificationTime, reminderOffset)
+	message := fmt.Sprintf("Today's Lectures (Daily notification at %s, Reminder %d minutes before):\n(All times are in UK time)\n\n", dailyNotificationTime, reminderOffset)
 	for _, lecture := range lecturesThisDay {
 		message += FormatEventDetails(lecture) + "\n"
 	}
@@ -71,13 +72,13 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 
 func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 	lectures := make(map[string][]*ical.VEvent)
-	now := time.Now().UTC()
+	now := utils.CurrentTimeUK()
 	offset := int(time.Monday - now.Weekday())
 	if offset > 0 {
 		offset = -6 // Go back to previous Monday if today is Sunday
 	}
 
-	monday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, offset)
+	monday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, utils.GetUKLocation()).AddDate(0, 0, offset)
 	friday := monday.AddDate(0, 0, 4).Add(24 * time.Hour)
 
 	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
@@ -93,6 +94,8 @@ func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 			log.Printf("Error parsing start time: %v", err)
 			continue
 		}
+
+		startTime = startTime.In(utils.GetUKLocation())
 
 		if startTime.After(monday) && startTime.Before(friday) {
 			weekday := daysOfWeek[int(startTime.Weekday())-1]
@@ -134,7 +137,7 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 		return nil
 	}
 
-	message := fmt.Sprintf("This Week's Lectures (Weekly notification at %s, Reminder %d minutes before):\n", weeklyNotificationTime, reminderOffset)
+	message := fmt.Sprintf("This Week's Lectures (Weekly notification at %s, Reminder %d minutes before):\n(All times are in UK time)\n\n", weeklyNotificationTime, reminderOffset)
 	for day, lectures := range lecturesThisWeek {
 		message += fmt.Sprintf("\n%s:\n", day)
 		for _, lecture := range lectures {
@@ -150,7 +153,7 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 }
 
 func SendReminder(bot common.BotAPI, chatID int64, lecture *ical.VEvent) error {
-	message := fmt.Sprintf("Reminder: Your lecture is starting soon!\n")
+	message := fmt.Sprintf("Reminder: Your lecture is starting soon!\n(All times are in UK time)\n\n")
 	message += FormatEventDetails(lecture)
 	msg := bot.NewMessage(chatID, message)
 	if _, err := bot.Send(msg); err != nil {
@@ -172,7 +175,8 @@ func FormatEventDetails(event *ical.VEvent) string {
 	}
 	if startProp := event.GetProperty(ical.ComponentPropertyDtStart); startProp != nil {
 		if start, err := time.Parse("20060102T150405Z", startProp.Value); err == nil {
-			startTime = start.Format("15:04")
+			ukTime := start.In(utils.GetUKLocation())
+			startTime = ukTime.Format("15:04")
 		}
 	}
 

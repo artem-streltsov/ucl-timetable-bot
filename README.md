@@ -45,6 +45,11 @@ To configure these notifications:
 3. Use `/set_weekly_time` to set when you receive weekly summaries
 4. Use `/set_reminder_offset` to set how far in advance you want lecture reminders
 
-## Additional Information
+## Time Zone Information
 
-- The bot uses UK time for all notifications
+**Important:** The UCL Timetable Bot operates using UK time (either GMT or BST, depending on the time of year). This means:
+
+- All times displayed in notifications and summaries are in UK time.
+- When setting notification times, please use UK time.
+
+Please keep this in mind when interacting with the bot, especially if you are in a different time zone.
