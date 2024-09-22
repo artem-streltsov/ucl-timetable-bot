@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"testing"
 
-	"github.com/artem-streltsov/ucl-timetable-bot/common"
 	"github.com/artem-streltsov/ucl-timetable-bot/database"
 	"github.com/artem-streltsov/ucl-timetable-bot/handlers"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -77,6 +76,16 @@ func TestHandleStartCommand(t *testing.T) {
 	mockBot.AssertExpectations(t)
 }
 
+func TestHandleSetWebCalPrompt(t *testing.T) {
+	mockBot := SetupMockBot()
+	mockBot.On("NewMessage", int64(123), "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with 'webcal://'.").Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	handlers.HandleSetWebCalPrompt(mockBot, 123)
+
+	mockBot.AssertExpectations(t)
+}
+
 func TestValidateWebCalLink(t *testing.T) {
 	cases := []struct {
 		input    string
@@ -105,14 +114,16 @@ func TestHandleWebCalLink(t *testing.T) {
 	mockBot.On("NewMessage", int64(456), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
 
-	handlers.HandleWebCalLink(mockBot, db, 123, "webcal://example.com")
+	result := handlers.HandleWebCalLink(mockBot, db, 123, "webcal://example.com")
+	assert.True(t, result)
 
 	var savedURL string
 	err := db.QueryRow("SELECT webcalURL FROM users WHERE chatID = ?", 123).Scan(&savedURL)
 	assert.NoError(t, err)
 	assert.Equal(t, "https://example.com", savedURL)
 
-	handlers.HandleWebCalLink(mockBot, db, 456, "http://example.com")
+	result = handlers.HandleWebCalLink(mockBot, db, 456, "http://example.com")
+	assert.False(t, result)
 
 	err = db.QueryRow("SELECT webcalURL FROM users WHERE chatID = ?", 456).Scan(&savedURL)
 	assert.Error(t, err)
@@ -152,6 +163,52 @@ func TestHandleWeekCommand(t *testing.T) {
 	mockBot.AssertExpectations(t)
 }
 
+func TestHandleSettingsCommand(t *testing.T) {
+	db := SetupDatabase(t)
+	defer db.Close()
+
+	err := database.InsertUser(db, 123, "https://example.com")
+	assert.NoError(t, err)
+
+	mockBot := SetupMockBot()
+	mockBot.On("NewMessage", int64(123), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	handlers.HandleSettingsCommand(mockBot, db, 123)
+
+	mockBot.AssertExpectations(t)
+}
+
+func TestHandleSetDailyTimePrompt(t *testing.T) {
+	mockBot := SetupMockBot()
+	mockBot.On("NewMessage", int64(123), "Please enter the time for daily notifications in HH:MM format (24-hour).").Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	handlers.HandleSetDailyTimePrompt(mockBot, 123)
+
+	mockBot.AssertExpectations(t)
+}
+
+func TestHandleSetWeeklyTimePrompt(t *testing.T) {
+	mockBot := SetupMockBot()
+	mockBot.On("NewMessage", int64(123), "Please enter the day and time for weekly notifications in the format DAY HH:MM (e.g., SUN 18:00).").Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	handlers.HandleSetWeeklyTimePrompt(mockBot, 123)
+
+	mockBot.AssertExpectations(t)
+}
+
+func TestHandleSetReminderOffsetPrompt(t *testing.T) {
+	mockBot := SetupMockBot()
+	mockBot.On("NewMessage", int64(123), "Please enter the reminder offset in minutes (e.g., 30 for 30 minutes before the lecture).").Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
+
+	handlers.HandleSetReminderOffsetPrompt(mockBot, 123)
+
+	mockBot.AssertExpectations(t)
+}
+
 func TestHandleSetDailyTime(t *testing.T) {
 	db := SetupDatabase(t)
 	defer db.Close()
@@ -163,8 +220,13 @@ func TestHandleSetDailyTime(t *testing.T) {
 	_, err := db.Exec(`INSERT INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent) VALUES (?, ?, NULL, NULL)`, 123, "http://example.com")
 	assert.NoError(t, err)
 
-	handlers.HandleSetDailyTime(mockBot, db, 123, "08:00")
+	result := handlers.HandleSetDailyTime(mockBot, db, 123, "08:00")
+	assert.True(t, result)
 	AssertDatabaseValue(t, db, 123, "dailyNotificationTime", "08:00")
+
+	result = handlers.HandleSetDailyTime(mockBot, db, 123, "invalid")
+	assert.False(t, result)
+
 	mockBot.AssertExpectations(t)
 }
 
@@ -179,8 +241,13 @@ func TestHandleSetWeeklyTime(t *testing.T) {
 	_, err := db.Exec(`INSERT INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent) VALUES (?, ?, NULL, NULL)`, 123, "http://example.com")
 	assert.NoError(t, err)
 
-	handlers.HandleSetWeeklyTime(mockBot, db, 123, "SUN 18:00")
+	result := handlers.HandleSetWeeklyTime(mockBot, db, 123, "SUN 18:00")
+	assert.True(t, result)
 	AssertDatabaseValue(t, db, 123, "weeklyNotificationTime", "SUN 18:00")
+
+	result = handlers.HandleSetWeeklyTime(mockBot, db, 123, "invalid")
+	assert.False(t, result)
+
 	mockBot.AssertExpectations(t)
 }
 
@@ -189,13 +256,18 @@ func TestHandleSetReminderOffset(t *testing.T) {
 	defer db.Close()
 
 	mockBot := SetupMockBot()
-	mockBot.On("NewMessage", int64(123), mock.AnythingOfType("string")).Return(common.MessageConfig{})
-	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(common.Message{}, nil)
+	mockBot.On("NewMessage", int64(123), mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
+	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
 
 	_, err := db.Exec(`INSERT INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent) VALUES (?, ?, NULL, NULL)`, 123, "http://example.com")
 	assert.NoError(t, err)
 
-	handlers.HandleSetReminderOffset(mockBot, db, 123, "30")
+	result := handlers.HandleSetReminderOffset(mockBot, db, 123, "30")
+	assert.True(t, result)
 	AssertDatabaseValue(t, db, 123, "reminderOffset", "30")
+
+	result = handlers.HandleSetReminderOffset(mockBot, db, 123, "invalid")
+	assert.False(t, result)
+
 	mockBot.AssertExpectations(t)
 }

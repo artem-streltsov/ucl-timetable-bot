@@ -28,14 +28,21 @@ func ValidateWebCalLink(webcalURL string) (string, bool) {
 	return strings.Replace(webcalURL, "webcal://", "https://", 1), true
 }
 
-func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) {
+func HandleSetWebCalPrompt(bot common.BotAPI, chatID int64) {
+	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with 'webcal://'.")
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("Error sending WebCal prompt: %v", err)
+	}
+}
+
+func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) bool {
 	validWebCalURL, valid := ValidateWebCalLink(webcalURL)
 	if !valid {
 		msg := bot.NewMessage(chatID, "Invalid link! Please provide a valid WebCal link that starts with 'webcal://'.")
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending invalid link message: %v", err)
 		}
-		return
+		return false
 	}
 
 	if err := database.InsertUser(db, chatID, validWebCalURL); err != nil {
@@ -44,7 +51,7 @@ func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending error message: %v", err)
 		}
-		return
+		return false
 	}
 
 	msg := bot.NewMessage(chatID, "Thank you! You will start receiving daily and weekly updates for your lectures. Use /settings to configure your notification preferences.")
@@ -59,6 +66,8 @@ func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 	if err := ScheduleNotifications(bot, db, chatID); err != nil {
 		log.Printf("Error scheduling notifications: %v", err)
 	}
+
+	return true
 }
 
 func SendNotifications(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {

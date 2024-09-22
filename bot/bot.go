@@ -3,9 +3,10 @@ package bot
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
-	"strings"
 
+	"github.com/artem-streltsov/ucl-timetable-bot/commands"
 	"github.com/artem-streltsov/ucl-timetable-bot/common"
 	"github.com/artem-streltsov/ucl-timetable-bot/handlers"
 	"github.com/artem-streltsov/ucl-timetable-bot/scheduler"
@@ -58,83 +59,55 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 
 			if update.Message.IsCommand() {
 				command := update.Message.Command()
-				args := update.Message.CommandArguments()
 
 				switch command {
-				case "start":
+				case commands.Commands.Start.Name:
 					handlers.HandleStartCommand(b.api, chatID)
-				case "today":
+				case commands.Commands.Today.Name:
 					handlers.HandleTodayCommand(b.api, db, chatID)
-				case "week":
+				case commands.Commands.Week.Name:
 					handlers.HandleWeekCommand(b.api, db, chatID)
-				case "settings":
+				case commands.Commands.Settings.Name:
 					handlers.HandleSettingsCommand(b.api, db, chatID)
-				case "set_daily_time":
-					if args == "" {
-						b.state[chatID] = "set_daily_time"
-						handlers.HandleSetDailyTimePrompt(b.api, chatID)
-					} else {
-						if !handlers.HandleSetDailyTime(b.api, db, chatID, args) {
-							b.state[chatID] = "set_daily_time"
-						} else {
-							delete(b.state, chatID)
-						}
-					}
-				case "set_weekly_time":
-					if args == "" {
-						b.state[chatID] = "set_weekly_time"
-						handlers.HandleSetWeeklyTimePrompt(b.api, chatID)
-					} else {
-						if !handlers.HandleSetWeeklyTime(b.api, db, chatID, args) {
-							b.state[chatID] = "set_weekly_time"
-						} else {
-							delete(b.state, chatID)
-						}
-					}
-				case "set_reminder_offset":
-					if args == "" {
-						b.state[chatID] = "set_reminder_offset"
-						handlers.HandleSetReminderOffsetPrompt(b.api, chatID)
-					} else {
-						if !handlers.HandleSetReminderOffset(b.api, db, chatID, args) {
-							b.state[chatID] = "set_reminder_offset"
-						} else {
-							delete(b.state, chatID)
-						}
-					}
+				case commands.Commands.SetDailyTime.Name:
+					b.state[chatID] = commands.Commands.SetDailyTime.Name
+					handlers.HandleSetDailyTimePrompt(b.api, chatID)
+				case commands.Commands.SetWeeklyTime.Name:
+					b.state[chatID] = commands.Commands.SetWeeklyTime.Name
+					handlers.HandleSetWeeklyTimePrompt(b.api, chatID)
+				case commands.Commands.SetReminderOffset.Name:
+					b.state[chatID] = commands.Commands.SetReminderOffset.Name
+					handlers.HandleSetReminderOffsetPrompt(b.api, chatID)
+				case commands.Commands.SetWebCal.Name:
+					b.state[chatID] = commands.Commands.SetWebCal.Name
+					handlers.HandleSetWebCalPrompt(b.api, chatID)
 				default:
-					msg := b.api.NewMessage(chatID, "Unknown command. Please use /settings to see available commands.")
+					availableCommands := getAvailableCommandsMessage()
+					msg := b.api.NewMessage(chatID, fmt.Sprintf("Unknown command. Available commands:\n%s", availableCommands))
 					b.api.Send(msg)
 				}
 			} else if update.Message.Text != "" {
 				if state, ok := b.state[chatID]; ok {
 					switch state {
-					case "set_daily_time":
-						if !handlers.HandleSetDailyTime(b.api, db, chatID, update.Message.Text) {
-							b.state[chatID] = "set_daily_time"
-						} else {
+					case commands.Commands.SetDailyTime.Name:
+						if handlers.HandleSetDailyTime(b.api, db, chatID, update.Message.Text) {
 							delete(b.state, chatID)
 						}
-					case "set_weekly_time":
-						if !handlers.HandleSetWeeklyTime(b.api, db, chatID, update.Message.Text) {
-							b.state[chatID] = "set_weekly_time"
-						} else {
+					case commands.Commands.SetWeeklyTime.Name:
+						if handlers.HandleSetWeeklyTime(b.api, db, chatID, update.Message.Text) {
 							delete(b.state, chatID)
 						}
-					case "set_reminder_offset":
-						if !handlers.HandleSetReminderOffset(b.api, db, chatID, update.Message.Text) {
-							b.state[chatID] = "set_reminder_offset"
-						} else {
+					case commands.Commands.SetReminderOffset.Name:
+						if handlers.HandleSetReminderOffset(b.api, db, chatID, update.Message.Text) {
 							delete(b.state, chatID)
 						}
-					}
-				} else if strings.HasPrefix(strings.ToLower(update.Message.Text), "webcal://") {
-					handlers.HandleWebCalLink(b.api, db, chatID, update.Message.Text)
-					if err := setDefaultPreferences(db, chatID); err != nil {
-						log.Printf("Error setting default preferences: %v", err)
+					case commands.Commands.SetWebCal.Name:
+						if handlers.HandleWebCalLink(b.api, db, chatID, update.Message.Text) {
+							delete(b.state, chatID)
+						}
 					}
 				} else {
-					msg := b.api.NewMessage(chatID, "I'm expecting a WebCal link. Please send a link starting with 'webcal://'.")
+					msg := b.api.NewMessage(chatID, "Please use a command to interact with the bot. Use /start to see available commands.")
 					b.api.Send(msg)
 				}
 			}
@@ -142,10 +115,10 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 	}
 }
 
-func setDefaultPreferences(db *sql.DB, chatID int64) error {
-	dailyTime := "07:00"
-	weeklyTime := "SUN 18:00"
-	reminderOffset := 30
-
-	return handlers.UpdateUserPreference(db, chatID, "all", dailyTime, weeklyTime, reminderOffset)
+func getAvailableCommandsMessage() string {
+	var commandList string
+	for _, cmd := range commands.GetAllCommands() {
+		commandList += fmt.Sprintf("/%s - %s\n", cmd.Name, cmd.Description)
+	}
+	return commandList
 }
