@@ -56,7 +56,7 @@ func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 		log.Printf("Error sending initial notifications: %v", err)
 	}
 
-	if err := ScheduleNotifications(bot, db, chatID, validWebCalURL); err != nil {
+	if err := ScheduleNotifications(bot, db, chatID); err != nil {
 		log.Printf("Error scheduling notifications: %v", err)
 	}
 }
@@ -76,12 +76,12 @@ func SendNotifications(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 	return nil
 }
 
-func ScheduleNotifications(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
-	if err := scheduler.ScheduleDailySummary(bot, db, chatID, webcalURL); err != nil {
+func ScheduleNotifications(bot common.BotAPI, db *sql.DB, chatID int64) error {
+	if err := scheduler.ScheduleDailySummary(bot, db, chatID); err != nil {
 		return fmt.Errorf("error scheduling daily summary: %w", err)
 	}
 
-	if err := scheduler.ScheduleWeeklySummary(bot, db, chatID, webcalURL); err != nil {
+	if err := scheduler.ScheduleWeeklySummary(bot, db, chatID); err != nil {
 		return fmt.Errorf("error scheduling weekly summary: %w", err)
 	}
 
@@ -210,6 +210,15 @@ func HandleSetDailyTime(bot common.BotAPI, db *sql.DB, chatID int64, timeStr str
 		return false
 	}
 
+	if err := scheduler.StopAndRescheduleNotifications(bot, db, chatID); err != nil {
+		log.Printf("Error rescheduling notifications: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while rescheduling your notifications. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+		return false
+	}
+
 	msg := bot.NewMessage(chatID, fmt.Sprintf("Daily notification time updated to %s", timeStr))
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending confirmation message: %v", err)
@@ -248,6 +257,15 @@ func HandleSetWeeklyTime(bot common.BotAPI, db *sql.DB, chatID int64, dayAndTime
 		return false
 	}
 
+	if err := scheduler.StopAndRescheduleNotifications(bot, db, chatID); err != nil {
+		log.Printf("Error rescheduling notifications: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while rescheduling your notifications. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+		return false
+	}
+
 	msg := bot.NewMessage(chatID, fmt.Sprintf("Weekly notification time updated to %s %s", day, timeStr))
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending confirmation message: %v", err)
@@ -269,6 +287,15 @@ func HandleSetReminderOffset(bot common.BotAPI, db *sql.DB, chatID int64, offset
 	if err := UpdateUserPreference(db, chatID, "reminderOffset", "", "", int(offset.Minutes())); err != nil {
 		log.Printf("Error updating reminder offset: %v", err)
 		msg := bot.NewMessage(chatID, "An error occurred while updating your settings. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+		return false
+	}
+
+	if err := scheduler.StopAndRescheduleNotifications(bot, db, chatID); err != nil {
+		log.Printf("Error rescheduling notifications: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while rescheduling your notifications. Please try again later.")
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("Error sending error message: %v", err)
 		}

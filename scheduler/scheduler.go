@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	ical "github.com/arran4/golang-ical"
@@ -15,7 +16,60 @@ import (
 	"github.com/artem-streltsov/ucl-timetable-bot/utils"
 )
 
-func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
+type UserTimers struct {
+	DailyTimer  *time.Timer
+	WeeklyTimer *time.Timer
+}
+
+var (
+	userTimers = make(map[int64]*UserTimers)
+	timerMutex sync.Mutex
+)
+
+func getOrCreateUserTimers(chatID int64) *UserTimers {
+	timerMutex.Lock()
+	defer timerMutex.Unlock()
+
+	if timers, ok := userTimers[chatID]; ok {
+		return timers
+	}
+
+	timers := &UserTimers{}
+	userTimers[chatID] = timers
+	return timers
+}
+
+func StopAndRescheduleNotifications(bot common.BotAPI, db *sql.DB, chatID int64) error {
+	log.Printf("Stopping and rescheduling notifications for chatID %d", chatID)
+	timers := getOrCreateUserTimers(chatID)
+
+	if timers.DailyTimer != nil {
+		log.Printf("Stopping existing daily timer for chatID %d", chatID)
+		timers.DailyTimer.Stop()
+	}
+	if timers.WeeklyTimer != nil {
+		log.Printf("Stopping existing weekly timer for chatID %d", chatID)
+		timers.WeeklyTimer.Stop()
+	}
+
+	if err := ScheduleDailySummary(bot, db, chatID); err != nil {
+		return fmt.Errorf("error rescheduling daily summary: %w", err)
+	}
+
+	if err := ScheduleWeeklySummary(bot, db, chatID); err != nil {
+		return fmt.Errorf("error rescheduling weekly summary: %w", err)
+	}
+
+	log.Printf("Successfully rescheduled notifications for chatID %d", chatID)
+	return nil
+}
+
+func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
+	webcalURL, err := database.GetWebCalURL(db, chatID)
+	if err != nil {
+		return fmt.Errorf("error getting user webcal url: %v", err)
+	}
+
 	now := utils.CurrentTimeUTC()
 	dailyNotificationTime, _, _, err := database.GetUserPreferences(db, chatID)
 	if err != nil {
@@ -28,14 +82,18 @@ func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL
 	}
 	durationUntilNextDaily := nextDaily.Sub(now)
 
-	time.AfterFunc(durationUntilNextDaily, func() {
+	log.Printf("Scheduling daily summary for chatID %d at %s (in %s)", chatID, nextDaily.Format(time.RFC3339), durationUntilNextDaily)
+
+	timers := getOrCreateUserTimers(chatID)
+	timers.DailyTimer = time.AfterFunc(durationUntilNextDaily, func() {
+		log.Printf("Sending daily summary for chatID %d", chatID)
 		if err := notifications.SendDailySummary(bot, db, chatID, webcalURL); err != nil {
 			log.Printf("Error sending daily summary: %v", err)
 		}
 		if err := database.UpdateLastDailySent(db, chatID, utils.CurrentTimeUTC()); err != nil {
 			log.Printf("Error updating lastDailySent: %v", err)
 		}
-		if err := ScheduleDailySummary(bot, db, chatID, webcalURL); err != nil {
+		if err := ScheduleDailySummary(bot, db, chatID); err != nil {
 			log.Printf("Error rescheduling daily summary: %v", err)
 		}
 	})
@@ -43,7 +101,12 @@ func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL
 	return nil
 }
 
-func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
+func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
+	webcalURL, err := database.GetWebCalURL(db, chatID)
+	if err != nil {
+		return fmt.Errorf("error getting user webcal url: %v", err)
+	}
+
 	now := utils.CurrentTimeUTC()
 	_, weeklyNotificationTime, _, err := database.GetUserPreferences(db, chatID)
 	if err != nil {
@@ -56,14 +119,18 @@ func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalUR
 	}
 	durationUntilNextWeekly := nextWeekly.Sub(now)
 
-	time.AfterFunc(durationUntilNextWeekly, func() {
+	log.Printf("Scheduling weekly summary for chatID %d at %s (in %s)", chatID, nextWeekly.Format(time.RFC3339), durationUntilNextWeekly)
+
+	timers := getOrCreateUserTimers(chatID)
+	timers.WeeklyTimer = time.AfterFunc(durationUntilNextWeekly, func() {
+		log.Printf("Sending weekly summary for chatID %d", chatID)
 		if err := notifications.SendWeeklySummary(bot, db, chatID, webcalURL); err != nil {
 			log.Printf("Error sending weekly summary: %v", err)
 		}
 		if err := database.UpdateLastWeeklySent(db, chatID, utils.CurrentTimeUTC()); err != nil {
 			log.Printf("Error updating lastWeeklySent: %v", err)
 		}
-		if err := ScheduleWeeklySummary(bot, db, chatID, webcalURL); err != nil {
+		if err := ScheduleWeeklySummary(bot, db, chatID); err != nil {
 			log.Printf("Error rescheduling weekly summary: %v", err)
 		}
 	})
@@ -214,14 +281,7 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 		}
 	}
 
-	if err := ScheduleDailySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
-		log.Printf("Error scheduling daily summary for chatID %d: %v", user.ChatID, err)
-	}
-	if err := ScheduleWeeklySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
-		log.Printf("Error scheduling weekly summary for chatID %d: %v", user.ChatID, err)
-	}
-
-	return nil
+	return StopAndRescheduleNotifications(bot, db, user.ChatID)
 }
 
 func ParseLectureStartTime(lecture *ical.VEvent) (time.Time, error) {
