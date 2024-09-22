@@ -8,6 +8,7 @@ import (
 	ical "github.com/arran4/golang-ical"
 	"github.com/artem-streltsov/ucl-timetable-bot/common"
 	"github.com/artem-streltsov/ucl-timetable-bot/scheduler"
+	"github.com/artem-streltsov/ucl-timetable-bot/utils"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
@@ -36,8 +37,8 @@ func setupTestDB(t *testing.T) *sql.DB {
 	_, err = db.Exec(`CREATE TABLE users (
 		chatID INTEGER PRIMARY KEY,
 		webcalURL TEXT,
-		lastDailySent DATETIME,
-		lastWeeklySent DATETIME,
+		lastDailySent INTEGER,
+		lastWeeklySent INTEGER,
 		dailyNotificationTime TEXT DEFAULT '18:00',
 		weeklyNotificationTime TEXT DEFAULT 'SUN 18:00',
 		reminderOffset INTEGER DEFAULT 30
@@ -116,8 +117,12 @@ func TestRescheduleNotificationsOnStartup(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
+	// Use epoch time for lastDailySent and lastWeeklySent
+	lastSentTime := time.Date(2023, 5, 1, 12, 0, 0, 0, time.UTC)
+	lastSentEpoch := utils.TimeToEpoch(lastSentTime)
+
 	_, err := db.Exec(`INSERT INTO users (chatID, webcalURL, lastDailySent, lastWeeklySent)
-		VALUES (?, ?, ?, ?)`, 123456, "https://example.com/calendar", "2023-05-01T12:00:00Z", "2023-05-01T12:00:00Z")
+		VALUES (?, ?, ?, ?)`, 123456, "https://example.com/calendar", lastSentEpoch, lastSentEpoch)
 	assert.NoError(t, err)
 
 	mockBot := new(MockBotAPI)

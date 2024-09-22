@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
@@ -16,8 +15,8 @@ import (
 type User struct {
 	ChatID                 int64
 	WebcalURL              string
-	LastDailySent          time.Time
-	LastWeeklySent         time.Time
+	LastDailySent          int64
+	LastWeeklySent         int64
 	DailyNotificationTime  string
 	WeeklyNotificationTime string
 	ReminderOffset         int
@@ -88,31 +87,31 @@ func GetWebCalURL(db *sql.DB, chatID int64) (string, error) {
 	return webcalURL, nil
 }
 
-func GetLastDailySentTime(db *sql.DB, chatID int64) (time.Time, error) {
-	var lastDailySent sql.NullTime
+func GetLastDailySentTime(db *sql.DB, chatID int64) (int64, error) {
+	var lastDailySent sql.NullInt64
 	err := db.QueryRow("SELECT lastDailySent FROM users WHERE chatID = ?", chatID).Scan(&lastDailySent)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to query lastDailySent: %w", err)
+		return 0, fmt.Errorf("failed to query lastDailySent: %w", err)
 	}
 	if lastDailySent.Valid {
-		return lastDailySent.Time, nil
+		return lastDailySent.Int64, nil
 	}
-	return time.Time{}, nil
+	return 0, nil
 }
 
-func GetLastWeeklySentTime(db *sql.DB, chatID int64) (time.Time, error) {
-	var lastWeeklySent sql.NullTime
+func GetLastWeeklySentTime(db *sql.DB, chatID int64) (int64, error) {
+	var lastWeeklySent sql.NullInt64
 	err := db.QueryRow("SELECT lastWeeklySent FROM users WHERE chatID = ?", chatID).Scan(&lastWeeklySent)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to query lastWeeklySent: %w", err)
+		return 0, fmt.Errorf("failed to query lastWeeklySent: %w", err)
 	}
 	if lastWeeklySent.Valid {
-		return lastWeeklySent.Time, nil
+		return lastWeeklySent.Int64, nil
 	}
-	return time.Time{}, nil
+	return 0, nil
 }
 
-func UpdateLastDailySent(db *sql.DB, chatID int64, lastSent time.Time) error {
+func UpdateLastDailySent(db *sql.DB, chatID int64, lastSent int64) error {
 	_, err := db.Exec("UPDATE users SET lastDailySent = ? WHERE chatID = ?", lastSent, chatID)
 	if err != nil {
 		return fmt.Errorf("failed to update lastDailySent: %w", err)
@@ -120,7 +119,7 @@ func UpdateLastDailySent(db *sql.DB, chatID int64, lastSent time.Time) error {
 	return nil
 }
 
-func UpdateLastWeeklySent(db *sql.DB, chatID int64, lastSent time.Time) error {
+func UpdateLastWeeklySent(db *sql.DB, chatID int64, lastSent int64) error {
 	_, err := db.Exec("UPDATE users SET lastWeeklySent = ? WHERE chatID = ?", lastSent, chatID)
 	if err != nil {
 		return fmt.Errorf("failed to update lastWeeklySent: %w", err)
@@ -156,17 +155,17 @@ func GetAllUsers(db *sql.DB) ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var user User
-		var lastDailySent, lastWeeklySent sql.NullTime
+		var lastDailySent, lastWeeklySent sql.NullInt64
 		err := rows.Scan(&user.ChatID, &user.WebcalURL, &lastDailySent, &lastWeeklySent, &user.DailyNotificationTime, &user.WeeklyNotificationTime, &user.ReminderOffset)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan user row: %w", err)
 		}
 
 		if lastDailySent.Valid {
-			user.LastDailySent = lastDailySent.Time
+			user.LastDailySent = lastDailySent.Int64
 		}
 		if lastWeeklySent.Valid {
-			user.LastWeeklySent = lastWeeklySent.Time
+			user.LastWeeklySent = lastWeeklySent.Int64
 		}
 
 		users = append(users, user)

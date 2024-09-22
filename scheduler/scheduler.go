@@ -90,7 +90,7 @@ func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
 		if err := notifications.SendDailySummary(bot, db, chatID, webcalURL); err != nil {
 			log.Printf("Error sending daily summary: %v", err)
 		}
-		if err := database.UpdateLastDailySent(db, chatID, utils.CurrentTimeUTC()); err != nil {
+		if err := database.UpdateLastDailySent(db, chatID, utils.TimeToEpoch(utils.CurrentTimeUTC())); err != nil {
 			log.Printf("Error updating lastDailySent: %v", err)
 		}
 		if err := ScheduleDailySummary(bot, db, chatID); err != nil {
@@ -127,7 +127,7 @@ func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
 		if err := notifications.SendWeeklySummary(bot, db, chatID, webcalURL); err != nil {
 			log.Printf("Error sending weekly summary: %v", err)
 		}
-		if err := database.UpdateLastWeeklySent(db, chatID, utils.CurrentTimeUTC()); err != nil {
+		if err := database.UpdateLastWeeklySent(db, chatID, utils.TimeToEpoch(utils.CurrentTimeUTC())); err != nil {
 			log.Printf("Error updating lastWeeklySent: %v", err)
 		}
 		if err := ScheduleWeeklySummary(bot, db, chatID); err != nil {
@@ -249,8 +249,9 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 		return fmt.Errorf("error getting user preferences: %w", err)
 	}
 
-	if !user.LastWeeklySent.IsZero() {
-		nextWeekly, err := GetNextNotificationTime(user.LastWeeklySent, "", weeklyTime)
+	if !utils.IsZeroEpoch(user.LastWeeklySent) {
+		lastWeeklySentTime := utils.EpochToTime(user.LastWeeklySent)
+		nextWeekly, err := GetNextNotificationTime(lastWeeklySentTime, "", weeklyTime)
 		if err != nil {
 			return fmt.Errorf("error getting next weekly notification time: %w", err)
 		}
@@ -258,15 +259,16 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 			if err := notifications.SendWeeklySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
 				log.Printf("Error sending missed weekly summary for chatID %d: %v", user.ChatID, err)
 			} else {
-				if err := database.UpdateLastWeeklySent(db, user.ChatID, now); err != nil {
+				if err := database.UpdateLastWeeklySent(db, user.ChatID, utils.TimeToEpoch(now)); err != nil {
 					log.Printf("Error updating lastWeeklySent for chatID %d: %v", user.ChatID, err)
 				}
 			}
 		}
 	}
 
-	if !user.LastDailySent.IsZero() {
-		nextDaily, err := GetNextNotificationTime(user.LastDailySent, dailyTime, "")
+	if !utils.IsZeroEpoch(user.LastDailySent) {
+		lastDailySentTime := utils.EpochToTime(user.LastDailySent)
+		nextDaily, err := GetNextNotificationTime(lastDailySentTime, dailyTime, "")
 		if err != nil {
 			return fmt.Errorf("error getting next daily notification time: %w", err)
 		}
@@ -274,7 +276,7 @@ func handleReschedule(bot common.BotAPI, db *sql.DB, user database.User, now tim
 			if err := notifications.SendDailySummary(bot, db, user.ChatID, user.WebcalURL); err != nil {
 				log.Printf("Error sending missed daily summary for chatID %d: %v", user.ChatID, err)
 			} else {
-				if err := database.UpdateLastDailySent(db, user.ChatID, now); err != nil {
+				if err := database.UpdateLastDailySent(db, user.ChatID, utils.TimeToEpoch(now)); err != nil {
 					log.Printf("Error updating lastDailySent for chatID %d: %v", user.ChatID, err)
 				}
 			}

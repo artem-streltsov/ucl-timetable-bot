@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/artem-streltsov/ucl-timetable-bot/database"
+	"github.com/artem-streltsov/ucl-timetable-bot/utils"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -79,21 +79,22 @@ func TestGetLastSentTimes(t *testing.T) {
 	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
-	now := time.Now().UTC()
+	now := utils.CurrentTimeUTC()
+	nowEpoch := utils.TimeToEpoch(now)
 
-	err = database.UpdateLastDailySent(db, chatID, now)
+	err = database.UpdateLastDailySent(db, chatID, nowEpoch)
 	assert.NoError(t, err)
 
-	lastDailySent, err := database.GetLastDailySentTime(db, chatID)
+	lastDailySentEpoch, err := database.GetLastDailySentTime(db, chatID)
 	assert.NoError(t, err)
-	assert.WithinDuration(t, now, lastDailySent, time.Second)
+	assert.Equal(t, nowEpoch, lastDailySentEpoch)
 
-	err = database.UpdateLastWeeklySent(db, chatID, now)
+	err = database.UpdateLastWeeklySent(db, chatID, nowEpoch)
 	assert.NoError(t, err)
 
-	lastWeeklySent, err := database.GetLastWeeklySentTime(db, chatID)
+	lastWeeklySentEpoch, err := database.GetLastWeeklySentTime(db, chatID)
 	assert.NoError(t, err)
-	assert.WithinDuration(t, now, lastWeeklySent, time.Second)
+	assert.Equal(t, nowEpoch, lastWeeklySentEpoch)
 }
 
 func TestGetUserPreferences(t *testing.T) {
@@ -146,6 +147,8 @@ func TestGetAllUsers(t *testing.T) {
 	for i, user := range retrievedUsers {
 		assert.Equal(t, users[i].chatID, user.ChatID)
 		assert.Equal(t, users[i].webcalURL, user.WebcalURL)
+		assert.Equal(t, int64(0), user.LastDailySent)
+		assert.Equal(t, int64(0), user.LastWeeklySent)
 	}
 }
 
@@ -158,14 +161,15 @@ func TestUpdateLastDailySent(t *testing.T) {
 	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
-	now := time.Now()
+	now := utils.CurrentTimeUTC()
+	nowEpoch := utils.TimeToEpoch(now)
 
-	err = database.UpdateLastDailySent(db, chatID, now)
+	err = database.UpdateLastDailySent(db, chatID, nowEpoch)
 	assert.NoError(t, err)
 
-	lastDailySent, err := database.GetLastDailySentTime(db, chatID)
+	lastDailySentEpoch, err := database.GetLastDailySentTime(db, chatID)
 	assert.NoError(t, err)
-	assert.WithinDuration(t, now, lastDailySent, time.Second)
+	assert.Equal(t, nowEpoch, lastDailySentEpoch)
 }
 
 func TestUpdateLastWeeklySent(t *testing.T) {
@@ -177,14 +181,15 @@ func TestUpdateLastWeeklySent(t *testing.T) {
 	err := database.InsertUser(db, chatID, webcalURL)
 	assert.NoError(t, err)
 
-	now := time.Now()
+	now := utils.CurrentTimeUTC()
+	nowEpoch := utils.TimeToEpoch(now)
 
-	err = database.UpdateLastWeeklySent(db, chatID, now)
+	err = database.UpdateLastWeeklySent(db, chatID, nowEpoch)
 	assert.NoError(t, err)
 
-	lastWeeklySent, err := database.GetLastWeeklySentTime(db, chatID)
+	lastWeeklySentEpoch, err := database.GetLastWeeklySentTime(db, chatID)
 	assert.NoError(t, err)
-	assert.WithinDuration(t, now, lastWeeklySent, time.Second)
+	assert.Equal(t, nowEpoch, lastWeeklySentEpoch)
 }
 
 func TestUpdateUserPreferences(t *testing.T) {
