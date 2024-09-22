@@ -62,6 +62,7 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 
 				switch command {
 				case commands.Commands.Start.Name:
+					b.state[chatID] = commands.Commands.SetWebCal.Name
 					handlers.HandleStartCommand(b.api, chatID)
 				case commands.Commands.Today.Name:
 					handlers.HandleTodayCommand(b.api, db, chatID)
@@ -107,7 +108,8 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 						}
 					}
 				} else {
-					msg := b.api.NewMessage(chatID, "Please use a command to interact with the bot. Use /start to see available commands.")
+					availableCommands := getAvailableCommandsMessage()
+					msg := b.api.NewMessage(chatID, fmt.Sprintf("Unknown command. Available commands:\n%s", availableCommands))
 					b.api.Send(msg)
 				}
 			}

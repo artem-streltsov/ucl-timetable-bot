@@ -14,7 +14,7 @@ import (
 )
 
 func HandleStartCommand(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable.")
+	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with 'webcal://'.")
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending start message: %v", err)
 	}
