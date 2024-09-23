@@ -11,7 +11,6 @@ import (
 
 	ical "github.com/arran4/golang-ical"
 	"github.com/artem-streltsov/ucl-timetable-bot/common"
-	"github.com/artem-streltsov/ucl-timetable-bot/database"
 	"github.com/artem-streltsov/ucl-timetable-bot/utils"
 )
 
@@ -28,11 +27,6 @@ func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
 }
 
 func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
-	dailyNotificationTime, _, reminderOffset, err := database.GetUserPreferences(db, chatID)
-	if err != nil {
-		return fmt.Errorf("error getting user preferences: %w", err)
-	}
-
 	response, err := http.Get(webcalURL)
 	if err != nil {
 		return fmt.Errorf("error fetching calendar: %w", err)
@@ -58,7 +52,7 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 		return nil
 	}
 
-	message := fmt.Sprintf("Today's Lectures (Daily notification at %s, Reminder %d minutes before):\n(All times are in UK time)\n\n", dailyNotificationTime, reminderOffset)
+	message := fmt.Sprintf("Today's Lectures (all times are in UK time):\n\n")
 	for _, lecture := range lecturesThisDay {
 		message += FormatEventDetails(lecture) + "\n"
 	}
@@ -107,11 +101,6 @@ func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 }
 
 func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
-	_, weeklyNotificationTime, reminderOffset, err := database.GetUserPreferences(db, chatID)
-	if err != nil {
-		return fmt.Errorf("error getting user preferences: %w", err)
-	}
-
 	response, err := http.Get(webcalURL)
 	if err != nil {
 		return fmt.Errorf("error fetching calendar: %w", err)
@@ -137,7 +126,7 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 		return nil
 	}
 
-	message := fmt.Sprintf("This Week's Lectures (Weekly notification at %s, Reminder %d minutes before):\n(All times are in UK time)\n\n", weeklyNotificationTime, reminderOffset)
+	message := fmt.Sprintf("This Week's Lectures (all times are in UK time):\n\n")
 	for day, lectures := range lecturesThisWeek {
 		message += fmt.Sprintf("\n%s:\n", day)
 		for _, lecture := range lectures {

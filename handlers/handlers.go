@@ -14,7 +14,7 @@ import (
 )
 
 func HandleStartCommand(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with 'webcal://'.")
+	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with `webcal://`. It can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy the WebCal link")
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending start message: %v", err)
 	}
@@ -29,7 +29,7 @@ func ValidateWebCalLink(webcalURL string) (string, bool) {
 }
 
 func HandleSetWebCalPrompt(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with 'webcal://'.")
+	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with `webcal://`. It can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy the WebCal link")
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending WebCal prompt: %v", err)
 	}
@@ -54,7 +54,7 @@ func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 		return false
 	}
 
-	msg := bot.NewMessage(chatID, "Thank you! You will start receiving daily and weekly updates for your lectures. Use /settings to configure your notification preferences.")
+	msg := bot.NewMessage(chatID, "Thank you! You will start receiving daily and weekly updates for your lectures.\nUse /settings to configure your notification preferences.")
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("Error sending confirmation message: %v", err)
 	}

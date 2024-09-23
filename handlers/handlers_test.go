@@ -68,7 +68,7 @@ func AssertDatabaseValue(t *testing.T, db *sql.DB, chatID int64, column, expecte
 
 func TestHandleStartCommand(t *testing.T) {
 	mockBot := SetupMockBot()
-	mockBot.On("NewMessage", int64(123), "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with 'webcal://'.").Return(tgbotapi.MessageConfig{})
+	mockBot.On("NewMessage", int64(123), "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with `webcal://`. It can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy the WebCal link").Return(tgbotapi.MessageConfig{})
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
 
 	handlers.HandleStartCommand(mockBot, 123)
@@ -78,7 +78,7 @@ func TestHandleStartCommand(t *testing.T) {
 
 func TestHandleSetWebCalPrompt(t *testing.T) {
 	mockBot := SetupMockBot()
-	mockBot.On("NewMessage", int64(123), "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with 'webcal://'.").Return(tgbotapi.MessageConfig{})
+	mockBot.On("NewMessage", int64(123), "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with `webcal://`. It can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy the WebCal link").Return(tgbotapi.MessageConfig{})
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
 
 	handlers.HandleSetWebCalPrompt(mockBot, 123)

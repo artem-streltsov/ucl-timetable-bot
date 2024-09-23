@@ -133,15 +133,8 @@ func TestSendDailySummary(t *testing.T) {
 	defer server.Close()
 
 	db, sqlMock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
+	assert.NoError(t, err)
 	defer db.Close()
-
-	sqlMock.ExpectQuery("SELECT dailyNotificationTime, weeklyNotificationTime, reminderOffset FROM users WHERE chatID = ?").
-		WithArgs(chatID).
-		WillReturnRows(sqlmock.NewRows([]string{"dailyNotificationTime", "weeklyNotificationTime", "reminderOffset"}).
-			AddRow("18:00", "SUN 18:00", 30))
 
 	mockBot.On("NewMessage", chatID, mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
@@ -149,8 +142,8 @@ func TestSendDailySummary(t *testing.T) {
 	err = notifications.SendDailySummary(mockBot, db, chatID, server.URL)
 	assert.NoError(t, err)
 
-	mockBot.AssertExpectations(t)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
+	mockBot.AssertExpectations(t)
 }
 
 func TestSendWeeklySummary(t *testing.T) {
@@ -161,15 +154,8 @@ func TestSendWeeklySummary(t *testing.T) {
 	defer server.Close()
 
 	db, sqlMock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
+	assert.NoError(t, err)
 	defer db.Close()
-
-	sqlMock.ExpectQuery("SELECT dailyNotificationTime, weeklyNotificationTime, reminderOffset FROM users WHERE chatID = ?").
-		WithArgs(chatID).
-		WillReturnRows(sqlmock.NewRows([]string{"dailyNotificationTime", "weeklyNotificationTime", "reminderOffset"}).
-			AddRow("18:00", "SUN 18:00", 30))
 
 	mockBot.On("NewMessage", chatID, mock.AnythingOfType("string")).Return(tgbotapi.MessageConfig{})
 	mockBot.On("Send", mock.AnythingOfType("tgbotapi.MessageConfig")).Return(tgbotapi.Message{}, nil)
@@ -177,8 +163,8 @@ func TestSendWeeklySummary(t *testing.T) {
 	err = notifications.SendWeeklySummary(mockBot, db, chatID, server.URL)
 	assert.NoError(t, err)
 
-	mockBot.AssertExpectations(t)
 	assert.NoError(t, sqlMock.ExpectationsWereMet())
+	mockBot.AssertExpectations(t)
 }
 
 func TestSendReminder(t *testing.T) {
