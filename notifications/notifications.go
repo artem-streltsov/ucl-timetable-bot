@@ -52,7 +52,7 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 		return nil
 	}
 
-	message := fmt.Sprintf("Today's Lectures (all times are in UK time):\n\n")
+	message := fmt.Sprintf("Today's Lectures (all times are in UK time):\n")
 	for _, lecture := range lecturesThisDay {
 		message += FormatEventDetails(lecture) + "\n"
 	}
@@ -126,7 +126,7 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 		return nil
 	}
 
-	message := fmt.Sprintf("This Week's Lectures (all times are in UK time):\n\n")
+	message := fmt.Sprintf("This Week's Lectures (all times are in UK time):\n")
 	for day, lectures := range lecturesThisWeek {
 		message += fmt.Sprintf("\n%s:\n", day)
 		for _, lecture := range lectures {
