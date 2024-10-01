@@ -85,6 +85,10 @@ func ScheduleDailySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
 	log.Printf("Scheduling daily summary for chatID %d at %s (in %s)", chatID, nextDaily.Format(time.RFC3339), durationUntilNextDaily)
 
 	timers := getOrCreateUserTimers(chatID)
+	if timers.DailyTimer != nil {
+		log.Printf("Stopping existing daily timer for chatID %d", chatID)
+		timers.DailyTimer.Stop()
+	}
 	timers.DailyTimer = time.AfterFunc(durationUntilNextDaily, func() {
 		log.Printf("Sending daily summary for chatID %d", chatID)
 		if err := notifications.SendDailySummary(bot, db, chatID, webcalURL); err != nil {
@@ -122,6 +126,10 @@ func ScheduleWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64) error {
 	log.Printf("Scheduling weekly summary for chatID %d at %s (in %s)", chatID, nextWeekly.Format(time.RFC3339), durationUntilNextWeekly)
 
 	timers := getOrCreateUserTimers(chatID)
+	if timers.WeeklyTimer != nil {
+		log.Printf("Stopping existing daily timer for chatID %d", chatID)
+		timers.WeeklyTimer.Stop()
+	}
 	timers.WeeklyTimer = time.AfterFunc(durationUntilNextWeekly, func() {
 		log.Printf("Sending weekly summary for chatID %d", chatID)
 		if err := notifications.SendWeeklySummary(bot, db, chatID, webcalURL); err != nil {
