@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
@@ -153,15 +152,27 @@ func SendReminder(bot common.BotAPI, chatID int64, lecture *ical.VEvent) error {
 }
 
 func cleanSummary(summary string) string {
-	re := regexp.MustCompile(`\s*$begin:math:display$.*?$end:math:display$`)
-	return re.ReplaceAllString(summary, "")
+	openBracketIndex := strings.Index(summary, "[")
+	if openBracketIndex != -1 {
+		closeBracketIndex := strings.Index(summary, "]")
+		if closeBracketIndex != -1 && closeBracketIndex > openBracketIndex {
+			summary = summary[:openBracketIndex] + summary[closeBracketIndex+1:]
+		}
+	}
+
+	return strings.TrimSpace(summary)
 }
 
 func FormatEventDetails(event *ical.VEvent) string {
+	category := "Unknown"
 	summary := "Unknown"
 	location := "Unknown"
 	startTime := "Unknown"
 	endTime := "Unknown"
+
+	if categoryProp := event.GetProperty(ical.ComponentPropertyCategories); categoryProp != nil {
+		category = categoryProp.Value
+	}
 
 	if summaryProp := event.GetProperty(ical.ComponentPropertySummary); summaryProp != nil {
 		rawSummary := summaryProp.Value
@@ -187,5 +198,5 @@ func FormatEventDetails(event *ical.VEvent) string {
 		}
 	}
 
-	return fmt.Sprintf("📚 Lecture: %s\n⏰ Time: %s - %s\n📍Location: %s\n", summary, startTime, endTime, location)
+	return fmt.Sprintf("📚 %s: %s\n⏰ Time: %s - %s\n📍Location: %s\n", category, summary, startTime, endTime, location)
 }

@@ -44,7 +44,8 @@ func TestFormatEventDetails(t *testing.T) {
 			name: "Winter time (GMT)",
 			event: func() *ical.VEvent {
 				event := ical.NewEvent("test-event")
-				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture")
+				event.SetProperty(ical.ComponentPropertyCategories, "Lecture")
+				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture [Lecture]")
 				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230115T090000Z") // January 15, 2023 (winter)
 				return event
@@ -55,17 +56,19 @@ func TestFormatEventDetails(t *testing.T) {
 			name: "Summer time (BST)",
 			event: func() *ical.VEvent {
 				event := ical.NewEvent("test-event")
-				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture")
+				event.SetProperty(ical.ComponentPropertyCategories, "Computer Practical")
+				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture [Computer Practical]")
 				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230615T090000Z") // June 15, 2023 (summer)
 				return event
 			}(),
-			expected: "📚 Lecture: Test Lecture\n⏰ Time: 10:00 - Unknown\n📍Location: Room 101\n",
+			expected: "📚 Computer Practical: Test Lecture\n⏰ Time: 10:00 - Unknown\n📍Location: Room 101\n",
 		},
 		{
 			name: "Missing summary",
 			event: func() *ical.VEvent {
 				event := ical.NewEvent("test-event")
+				event.SetProperty(ical.ComponentPropertyCategories, "Lecture")
 				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230515T090000Z")
 				return event
@@ -76,6 +79,7 @@ func TestFormatEventDetails(t *testing.T) {
 			name: "Missing location",
 			event: func() *ical.VEvent {
 				event := ical.NewEvent("test-event")
+				event.SetProperty(ical.ComponentPropertyCategories, "Lecture")
 				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture")
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230515T090000Z")
 				return event
@@ -86,6 +90,7 @@ func TestFormatEventDetails(t *testing.T) {
 			name: "Missing start time",
 			event: func() *ical.VEvent {
 				event := ical.NewEvent("test-event")
+				event.SetProperty(ical.ComponentPropertyCategories, "Lecture")
 				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture")
 				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
 				return event
