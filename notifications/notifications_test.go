@@ -50,7 +50,7 @@ func TestFormatEventDetails(t *testing.T) {
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230115T090000Z") // January 15, 2023 (winter)
 				return event
 			}(),
-			expected: "📚 Lecture: *Test Lecture*\n⏰ Time: 09:00 - Unknown\n📍Location: Room 101\n",
+			expected: "📚 *Test Lecture*\n⏰ 09:00 - Unknown\n📍Room 101\n",
 		},
 		{
 			name: "Summer time (BST)",
@@ -62,7 +62,7 @@ func TestFormatEventDetails(t *testing.T) {
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230615T090000Z") // June 15, 2023 (summer)
 				return event
 			}(),
-			expected: "📚 Computer Practical: *Test Lecture*\n⏰ Time: 10:00 - Unknown\n📍Location: Room 101\n",
+			expected: "📚 *Test Lecture*\n⏰ 10:00 - Unknown\n📍Room 101\n",
 		},
 		{
 			name: "Missing summary",
@@ -73,7 +73,7 @@ func TestFormatEventDetails(t *testing.T) {
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230515T090000Z")
 				return event
 			}(),
-			expected: "📚 Lecture: *Unknown*\n⏰ Time: 10:00 - Unknown\n📍Location: Room 101\n",
+			expected: "📚 *Unknown*\n⏰ 10:00 - Unknown\n📍Room 101\n",
 		},
 		{
 			name: "Missing location",
@@ -84,7 +84,7 @@ func TestFormatEventDetails(t *testing.T) {
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230515T090000Z")
 				return event
 			}(),
-			expected: "📚 Lecture: *Test Lecture*\n⏰ Time: 10:00 - Unknown\n📍Location: Unknown\n",
+			expected: "📚 *Test Lecture*\n⏰ 10:00 - Unknown\n📍Unknown\n",
 		},
 		{
 			name: "Missing start time",
@@ -95,7 +95,7 @@ func TestFormatEventDetails(t *testing.T) {
 				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
 				return event
 			}(),
-			expected: "📚 Lecture: *Test Lecture*\n⏰ Time: Unknown - Unknown\n📍Location: Room 101\n",
+			expected: "📚 *Test Lecture*\n⏰ Unknown - Unknown\n📍Room 101\n",
 		},
 	}
 
