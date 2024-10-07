@@ -63,7 +63,7 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 	}
 
 	msg := bot.NewMessage(chatID, message)
-	msg.ParseMode = "Markdown"
+	msg.ParseMode = "MarkdownV2"
 	if _, err := bot.Send(msg); err != nil {
 		return fmt.Errorf("error sending daily summary: %w", err)
 	}
@@ -143,16 +143,16 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 
 	formattedWeekRange := utils.FormatWeekRange(startDay, endDay)
 
-	message := fmt.Sprintf("**%s - Lectures:**\n\n", formattedWeekRange)
+	message := fmt.Sprintf("**%s - Lectures:**\n", formattedWeekRange)
 	for day, lectures := range lecturesThisWeek {
-		message += fmt.Sprintf("\n📅 **%s:**\n", day)
+		message += fmt.Sprintf("\n**%s:**\n", day)
 		for _, lecture := range lectures {
 			message += FormatEventDetails(lecture) + "\n"
 		}
 	}
 
 	msg := bot.NewMessage(chatID, message)
-	msg.ParseMode = "Markdown"
+	msg.ParseMode = "MarkdownV2"
 	if _, err := bot.Send(msg); err != nil {
 		return fmt.Errorf("error sending weekly summary: %w", err)
 	}
