@@ -145,7 +145,7 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 
 	message := fmt.Sprintf("*%s - Lectures:*\n", formattedWeekRange)
 	for day, lectures := range lecturesThisWeek {
-		message += fmt.Sprintf("\n**%s:**\n", day)
+		message += fmt.Sprintf("\n*%s:*\n", day)
 		for _, lecture := range lectures {
 			message += FormatEventDetails(lecture) + "\n"
 		}
