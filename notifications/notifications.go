@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -73,8 +74,6 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 func getWeekLectures(calendar *ical.Calendar, startDay, endDay time.Time) map[string][]*ical.VEvent {
 	lectures := make(map[string][]*ical.VEvent)
 
-	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
-
 	for _, event := range calendar.Events() {
 		startProp := event.GetProperty(ical.ComponentPropertyDtStart)
 		if startProp == nil {
@@ -88,10 +87,18 @@ func getWeekLectures(calendar *ical.Calendar, startDay, endDay time.Time) map[st
 		}
 
 		startTime = startTime.In(utils.GetUKLocation())
-		if startTime.After(startDay) && startTime.Before(endDay) {
-			weekday := daysOfWeek[int(startTime.Weekday())-1]
+		if !startTime.Before(startDay) && !startTime.After(endDay.AddDate(0, 0, 1).Add(-time.Nanosecond)) {
+			weekday := startTime.Weekday().String()
 			lectures[weekday] = append(lectures[weekday], event)
 		}
+	}
+
+	for _, events := range lectures {
+		sort.Slice(events, func(i, j int) bool {
+			ti, _ := time.Parse("20060102T150405Z", events[i].GetProperty(ical.ComponentPropertyDtStart).Value)
+			tj, _ := time.Parse("20060102T150405Z", events[j].GetProperty(ical.ComponentPropertyDtStart).Value)
+			return ti.Before(tj)
+		})
 	}
 
 	return lectures
@@ -117,20 +124,15 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 	now := utils.CurrentTimeUK()
 	var startDay, endDay time.Time
 
-	switch now.Weekday() {
-	case time.Monday:
-		startDay = now                // Start from today
-		endDay = now.AddDate(0, 0, 4) // Upcoming Friday
-	case time.Tuesday, time.Wednesday, time.Thursday, time.Friday:
-		startDay = now.AddDate(0, 0, int(time.Monday-now.Weekday())) // Previous Monday
-		endDay = now.AddDate(0, 0, 4)                                // Upcoming Friday
-	case time.Saturday:
-		startDay = now.AddDate(0, 0, 2) // Next Monday
-		endDay = now.AddDate(0, 0, 7)   // Next Friday
-	case time.Sunday:
-		startDay = now.AddDate(0, 0, 1) // Next Monday
-		endDay = now.AddDate(0, 0, 6)   // Next Friday
+	weekday := now.Weekday()
+	if weekday == time.Saturday || weekday == time.Sunday {
+		daysUntilMonday := (int(time.Monday) - int(weekday) + 7) % 7
+		startDay = now.AddDate(0, 0, daysUntilMonday)
+	} else {
+		daysSinceMonday := (int(weekday) - int(time.Monday) + 7) % 7
+		startDay = now.AddDate(0, 0, -daysSinceMonday)
 	}
+	endDay = startDay.AddDate(0, 0, 4)
 
 	lecturesThisWeek := getWeekLectures(calendar, startDay, endDay)
 	if len(lecturesThisWeek) == 0 {
@@ -141,10 +143,15 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 		return nil
 	}
 
+	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
 	formattedWeekRange := utils.FormatWeekRange(startDay, endDay)
 
 	message := fmt.Sprintf("*%s - Lectures:*\n", formattedWeekRange)
-	for day, lectures := range lecturesThisWeek {
+	for _, day := range daysOfWeek {
+		lectures := lecturesThisWeek[day]
+		if len(lectures) == 0 {
+			continue
+		}
 		message += fmt.Sprintf("\n*%s:*\n", day)
 		for _, lecture := range lectures {
 			message += FormatEventDetails(lecture) + "\n"
