@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	ical "github.com/arran4/golang-ical"
 	"github.com/artem-streltsov/ucl-timetable-bot/common"
@@ -52,7 +53,7 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 		return nil
 	}
 
-	message := fmt.Sprintf("Today's Lectures (all times are in UK time):\n")
+	message := fmt.Sprintf("Today's Lectures:\n")
 	for _, lecture := range lecturesThisDay {
 		message += FormatEventDetails(lecture) + "\n"
 	}
@@ -126,7 +127,7 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 		return nil
 	}
 
-	message := fmt.Sprintf("This Week's Lectures (all times are in UK time):\n")
+	message := fmt.Sprintf("This Week's Lectures:\n")
 	for day, lectures := range lecturesThisWeek {
 		message += fmt.Sprintf("\n%s:\n", day)
 		for _, lecture := range lectures {
@@ -160,7 +161,36 @@ func cleanSummary(summary string) string {
 		}
 	}
 
+	summary = removeLevelPattern(summary)
+
 	return strings.TrimSpace(summary)
+}
+
+func removeLevelPattern(summary string) string {
+	for {
+		levelIndex := strings.Index(summary, "Level")
+		if levelIndex == -1 {
+			break
+		}
+
+		numberStartIndex := levelIndex + len("Level")
+		if numberStartIndex >= len(summary) {
+			break
+		}
+
+		if !unicode.IsSpace(rune(summary[numberStartIndex])) {
+			break
+		}
+
+		numberEndIndex := numberStartIndex + 1
+		for numberEndIndex < len(summary) && unicode.IsDigit(rune(summary[numberEndIndex])) {
+			numberEndIndex++
+		}
+
+		summary = strings.TrimSpace(summary[:levelIndex] + summary[numberEndIndex:])
+	}
+
+	return summary
 }
 
 func FormatEventDetails(event *ical.VEvent) string {

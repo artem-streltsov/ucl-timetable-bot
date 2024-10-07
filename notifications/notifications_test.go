@@ -45,7 +45,7 @@ func TestFormatEventDetails(t *testing.T) {
 			event: func() *ical.VEvent {
 				event := ical.NewEvent("test-event")
 				event.SetProperty(ical.ComponentPropertyCategories, "Lecture")
-				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture [Lecture]")
+				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture Level 6 [Lecture]")
 				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230115T090000Z") // January 15, 2023 (winter)
 				return event
@@ -57,7 +57,7 @@ func TestFormatEventDetails(t *testing.T) {
 			event: func() *ical.VEvent {
 				event := ical.NewEvent("test-event")
 				event.SetProperty(ical.ComponentPropertyCategories, "Computer Practical")
-				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture [Computer Practical]")
+				event.SetProperty(ical.ComponentPropertySummary, "Test Lecture [Computer Practical] Level 5")
 				event.SetProperty(ical.ComponentPropertyLocation, "Room 101")
 				event.SetProperty(ical.ComponentPropertyDtStart, "20230615T090000Z") // June 15, 2023 (summer)
 				return event
