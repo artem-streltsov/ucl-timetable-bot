@@ -58,7 +58,7 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 	dayWithSuffix := utils.GetDayWithSuffix(today.Day())
 	formattedDate := today.Format("Mon,") + " " + dayWithSuffix + " " + today.Format("Jan")
 
-	message := fmt.Sprintf("*%s - Lectures Today:*\n\n", formattedDate)
+	message := fmt.Sprintf("*%s:*\n\n", formattedDate)
 	for _, lecture := range lecturesThisDay {
 		message += FormatEventDetails(lecture) + "\n"
 	}
@@ -146,7 +146,7 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
 	formattedWeekRange := utils.FormatWeekRange(startDay, endDay)
 
-	message := fmt.Sprintf("*%s - Lectures:*\n", formattedWeekRange)
+	message := fmt.Sprintf("*%s:*\n", formattedWeekRange)
 	for _, day := range daysOfWeek {
 		lectures := lecturesThisWeek[day]
 		if len(lectures) == 0 {
@@ -218,15 +218,10 @@ func removeLevelPattern(summary string) string {
 }
 
 func FormatEventDetails(event *ical.VEvent) string {
-	category := "Unknown"
 	summary := "Unknown"
 	location := "Unknown"
 	startTime := "Unknown"
 	endTime := "Unknown"
-
-	if categoryProp := event.GetProperty(ical.ComponentPropertyCategories); categoryProp != nil {
-		category = categoryProp.Value
-	}
 
 	if summaryProp := event.GetProperty(ical.ComponentPropertySummary); summaryProp != nil {
 		rawSummary := summaryProp.Value
@@ -252,5 +247,5 @@ func FormatEventDetails(event *ical.VEvent) string {
 		}
 	}
 
-	return fmt.Sprintf("📚 %s: *%s*\n⏰ Time: %s - %s\n📍Location: %s\n", category, summary, startTime, endTime, location)
+	return fmt.Sprintf("📚 *%s*\n⏰ %s - %s\n📍%s\n", summary, startTime, endTime, location)
 }
