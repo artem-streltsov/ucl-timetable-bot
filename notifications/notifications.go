@@ -70,16 +70,8 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 	return nil
 }
 
-func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
+func getWeekLectures(calendar *ical.Calendar, startDay, endDay time.Time) map[string][]*ical.VEvent {
 	lectures := make(map[string][]*ical.VEvent)
-	now := utils.CurrentTimeUK()
-	offset := int(time.Monday - now.Weekday())
-	if offset > 0 {
-		offset = -6 // Go back to previous Monday if today is Sunday
-	}
-
-	monday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, utils.GetUKLocation()).AddDate(0, 0, offset)
-	friday := monday.AddDate(0, 0, 4).Add(24 * time.Hour)
 
 	daysOfWeek := []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
 
@@ -96,8 +88,7 @@ func getWeekLectures(calendar *ical.Calendar) map[string][]*ical.VEvent {
 		}
 
 		startTime = startTime.In(utils.GetUKLocation())
-
-		if startTime.After(monday) && startTime.Before(friday) {
+		if startTime.After(startDay) && startTime.Before(endDay) {
 			weekday := daysOfWeek[int(startTime.Weekday())-1]
 			lectures[weekday] = append(lectures[weekday], event)
 		}
@@ -123,7 +114,25 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 		return fmt.Errorf("error parsing calendar: %w", err)
 	}
 
-	lecturesThisWeek := getWeekLectures(calendar)
+	now := utils.CurrentTimeUK()
+	var startDay, endDay time.Time
+
+	switch now.Weekday() {
+	case time.Monday:
+		startDay = now                // Start from today
+		endDay = now.AddDate(0, 0, 4) // Upcoming Friday
+	case time.Tuesday, time.Wednesday, time.Thursday, time.Friday:
+		startDay = now.AddDate(0, 0, int(time.Monday-now.Weekday())) // Previous Monday
+		endDay = now.AddDate(0, 0, 4)                                // Upcoming Friday
+	case time.Saturday:
+		startDay = now.AddDate(0, 0, 2) // Next Monday
+		endDay = now.AddDate(0, 0, 7)   // Next Friday
+	case time.Sunday:
+		startDay = now.AddDate(0, 0, 1) // Next Monday
+		endDay = now.AddDate(0, 0, 6)   // Next Friday
+	}
+
+	lecturesThisWeek := getWeekLectures(calendar, startDay, endDay)
 	if len(lecturesThisWeek) == 0 {
 		msg := bot.NewMessage(chatID, "No lectures scheduled for this week.")
 		if _, err := bot.Send(msg); err != nil {
@@ -132,9 +141,11 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 		return nil
 	}
 
-	message := fmt.Sprintf("This Week's Lectures:\n")
+	formattedWeekRange := utils.FormatWeekRange(startDay, endDay)
+
+	message := fmt.Sprintf("**%s - Lectures:**\n", formattedWeekRange)
 	for day, lectures := range lecturesThisWeek {
-		message += fmt.Sprintf("\n%s:\n", day)
+		message += fmt.Sprintf("\n📅 **%s:**\n", day)
 		for _, lecture := range lectures {
 			message += FormatEventDetails(lecture) + "\n"
 		}
