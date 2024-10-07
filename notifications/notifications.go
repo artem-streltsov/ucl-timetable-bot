@@ -53,12 +53,17 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 		return nil
 	}
 
-	message := fmt.Sprintf("Today's Lectures:\n")
+	today := time.Now().In(utils.GetUKLocation())
+	dayWithSuffix := utils.GetDayWithSuffix(today.Day())
+	formattedDate := today.Format("Mon,") + " " + dayWithSuffix + " " + today.Format("Jan")
+
+	message := fmt.Sprintf("**%s - Lectures Today:**\n\n", formattedDate)
 	for _, lecture := range lecturesThisDay {
 		message += FormatEventDetails(lecture) + "\n"
 	}
 
 	msg := bot.NewMessage(chatID, message)
+	msg.ParseMode = "Markdown"
 	if _, err := bot.Send(msg); err != nil {
 		return fmt.Errorf("error sending daily summary: %w", err)
 	}
@@ -228,5 +233,5 @@ func FormatEventDetails(event *ical.VEvent) string {
 		}
 	}
 
-	return fmt.Sprintf("📚 %s: %s\n⏰ Time: %s - %s\n📍Location: %s\n", category, summary, startTime, endTime, location)
+	return fmt.Sprintf("📚 %s: **%s**\n⏰ Time: %s - %s\n📍Location: %s\n", category, summary, startTime, endTime, location)
 }

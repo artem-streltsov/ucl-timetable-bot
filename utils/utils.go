@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -47,4 +48,30 @@ func CurrentTimeEpoch() int64 {
 
 func GetUKLocation() *time.Location {
 	return ukLocation
+}
+
+func GetDayWithSuffix(day int) string {
+	if day >= 11 && day <= 13 {
+		return fmt.Sprintf("%dth", day)
+	}
+	switch day % 10 {
+	case 1:
+		return fmt.Sprintf("%dst", day)
+	case 2:
+		return fmt.Sprintf("%dnd", day)
+	case 3:
+		return fmt.Sprintf("%drd", day)
+	default:
+		return fmt.Sprintf("%dth", day)
+	}
+}
+
+func FormatWeekRange(monday, friday time.Time) string {
+	daySuffixMonday := GetDayWithSuffix(monday.Day())
+	daySuffixFriday := GetDayWithSuffix(friday.Day())
+
+	formattedMonday := monday.Format("Mon,") + " " + daySuffixMonday + " " + monday.Format("Jan")
+	formattedFriday := friday.Format("Fri,") + " " + daySuffixFriday + " " + friday.Format("Jan")
+
+	return fmt.Sprintf("%s - %s", formattedMonday, formattedFriday)
 }
