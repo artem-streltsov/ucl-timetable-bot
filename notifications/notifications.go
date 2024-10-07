@@ -87,7 +87,8 @@ func getWeekLectures(calendar *ical.Calendar, startDay, endDay time.Time) map[st
 		}
 
 		startTime = startTime.In(utils.GetUKLocation())
-		if !startTime.Before(startDay) && !startTime.After(endDay.AddDate(0, 0, 1).Add(-time.Nanosecond)) {
+
+		if !startTime.Before(startDay) && !startTime.After(endDay) {
 			weekday := startTime.Weekday().String()
 			lectures[weekday] = append(lectures[weekday], event)
 		}
@@ -133,6 +134,10 @@ func SendWeeklySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL st
 		startDay = now.AddDate(0, 0, -daysSinceMonday)
 	}
 	endDay = startDay.AddDate(0, 0, 4)
+
+	location := utils.GetUKLocation()
+	startDay = time.Date(startDay.Year(), startDay.Month(), startDay.Day(), 0, 0, 0, 0, location)
+	endDay = time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), location)
 
 	lecturesThisWeek := getWeekLectures(calendar, startDay, endDay)
 	if len(lecturesThisWeek) == 0 {
