@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -151,17 +152,27 @@ func SendReminder(bot common.BotAPI, chatID int64, lecture *ical.VEvent) error {
 	return nil
 }
 
+func cleanSummary(summary string) string {
+	re := regexp.MustCompile(`\s*$begin:math:display$.*?$end:math:display$`)
+	return re.ReplaceAllString(summary, "")
+}
+
 func FormatEventDetails(event *ical.VEvent) string {
 	summary := "Unknown"
 	location := "Unknown"
 	startTime := "Unknown"
+	endTime := "Unknown"
 
 	if summaryProp := event.GetProperty(ical.ComponentPropertySummary); summaryProp != nil {
-		summary = summaryProp.Value
+		rawSummary := summaryProp.Value
+		summary = cleanSummary(rawSummary)
+		summary = strings.TrimSpace(summary)
 	}
+
 	if locationProp := event.GetProperty(ical.ComponentPropertyLocation); locationProp != nil {
 		location = locationProp.Value
 	}
+
 	if startProp := event.GetProperty(ical.ComponentPropertyDtStart); startProp != nil {
 		if start, err := time.Parse("20060102T150405Z", startProp.Value); err == nil {
 			ukTime := start.In(utils.GetUKLocation())
@@ -169,5 +180,12 @@ func FormatEventDetails(event *ical.VEvent) string {
 		}
 	}
 
-	return fmt.Sprintf("- %s at %s, starting at %s", summary, location, startTime)
+	if endProp := event.GetProperty(ical.ComponentPropertyDtEnd); endProp != nil {
+		if end, err := time.Parse("20060102T150405Z", endProp.Value); err == nil {
+			ukEndTime := end.In(utils.GetUKLocation())
+			endTime = ukEndTime.Format("15:04")
+		}
+	}
+
+	return fmt.Sprintf("📚 Lecture: %s\n⏰ Time: %s - %s\n📍Location: %s\n", summary, startTime, endTime, location)
 }
