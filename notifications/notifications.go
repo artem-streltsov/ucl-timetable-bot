@@ -28,6 +28,18 @@ func getDayLectures(calendar *ical.Calendar) []*ical.VEvent {
 	return lectures
 }
 
+func getTomorrowLectures(calendar *ical.Calendar) []*ical.VEvent {
+	tomorrow := utils.CurrentTimeUK().Add(24 * time.Hour).Format("20060102")
+	lectures := []*ical.VEvent{}
+	for _, event := range calendar.Events() {
+		start := event.GetProperty(ical.ComponentPropertyDtStart)
+		if start != nil && strings.HasPrefix(start.Value, tomorrow) {
+			lectures = append(lectures, event)
+		}
+	}
+	return lectures
+}
+
 func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
 	response, err := http.Get(webcalURL)
 	if err != nil {
@@ -60,6 +72,49 @@ func SendDailySummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL str
 
 	message := fmt.Sprintf("*%s:*\n\n", formattedDate)
 	for _, lecture := range lecturesThisDay {
+		message += FormatEventDetails(lecture) + "\n"
+	}
+
+	msg := bot.NewMessage(chatID, message)
+	msg.ParseMode = "Markdown"
+	if _, err := bot.Send(msg); err != nil {
+		return fmt.Errorf("error sending daily summary: %w", err)
+	}
+	return nil
+}
+
+func SendTomorrowSummary(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
+	response, err := http.Get(webcalURL)
+	if err != nil {
+		return fmt.Errorf("error fetching calendar: %w", err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("error reading calendar: %w", err)
+	}
+
+	calendar, err := ical.ParseCalendar(strings.NewReader(string(body)))
+	if err != nil {
+		return fmt.Errorf("error parsing calendar: %w", err)
+	}
+
+	lecturesTomorrow := getTomorrowLectures(calendar)
+	if len(lecturesTomorrow) == 0 {
+		msg := bot.NewMessage(chatID, "No lectures scheduled for tomorrow.")
+		if _, err := bot.Send(msg); err != nil {
+			return fmt.Errorf("error sending no lectures message: %w", err)
+		}
+		return nil
+	}
+
+	tomorrow := time.Now().In(utils.GetUKLocation()).Add(24 * time.Hour)
+	dayWithSuffix := utils.GetDayWithSuffix(tomorrow.Day())
+	formattedDate := tomorrow.Format("Mon,") + " " + dayWithSuffix + " " + tomorrow.Format("Jan")
+
+	message := fmt.Sprintf("*%s:*\n\n", formattedDate)
+	for _, lecture := range lecturesTomorrow {
 		message += FormatEventDetails(lecture) + "\n"
 	}
 

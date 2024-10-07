@@ -125,6 +125,34 @@ func HandleTodayCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
 	}
 }
 
+func HandleTomorrowCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
+	webcalURL, err := database.GetWebCalURL(db, chatID)
+	if err != nil {
+		log.Printf("Error fetching WebCal URL: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while fetching your timetable. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+		return
+	}
+
+	if webcalURL == "" {
+		msg := bot.NewMessage(chatID, "You haven't provided a WebCal link yet. Please use the /start command to set up your timetable.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending WebCal not found message: %v", err)
+		}
+		return
+	}
+
+	if err := notifications.SendTomorrowSummary(bot, db, chatID, webcalURL); err != nil {
+		log.Printf("Error sending tomorrow summary: %v", err)
+		msg := bot.NewMessage(chatID, "An error occurred while fetching tomorrow's lectures. Please try again later.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("Error sending error message: %v", err)
+		}
+	}
+}
+
 func HandleWeekCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
 	webcalURL, err := database.GetWebCalURL(db, chatID)
 	if err != nil {

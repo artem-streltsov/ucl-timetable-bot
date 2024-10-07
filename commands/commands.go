@@ -8,6 +8,7 @@ type Command struct {
 var Commands = struct {
 	Start             Command
 	Today             Command
+	Tomorrow          Command
 	Week              Command
 	Settings          Command
 	SetDailyTime      Command
@@ -18,6 +19,7 @@ var Commands = struct {
 	Start:             Command{Name: "start", Description: "Start the bot"},
 	SetWebCal:         Command{Name: "set_webcal", Description: "Set or update your WebCal link"},
 	Today:             Command{Name: "today", Description: "Get today's lecture schedule"},
+	Tomorrow:          Command{Name: "tomorrow", Description: "Get tomorrow's lecture schedule"},
 	Week:              Command{Name: "week", Description: "Get this week's lecture schedule"},
 	Settings:          Command{Name: "settings", Description: "View and update your notification settings"},
 	SetDailyTime:      Command{Name: "set_daily_time", Description: "Set the time for daily notifications"},
@@ -29,6 +31,7 @@ func GetAllCommands() []Command {
 	return []Command{
 		Commands.Start,
 		Commands.Today,
+		Commands.Tomorrow,
 		Commands.Week,
 		Commands.Settings,
 		Commands.SetDailyTime,

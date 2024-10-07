@@ -66,6 +66,8 @@ func (b *Bot) Run(ctx context.Context, db *sql.DB) error {
 					handlers.HandleStartCommand(b.api, chatID)
 				case commands.Commands.Today.Name:
 					handlers.HandleTodayCommand(b.api, db, chatID)
+				case commands.Commands.Tomorrow.Name:
+					handlers.HandleTomorrowCommand(b.api, db, chatID)
 				case commands.Commands.Week.Name:
 					handlers.HandleWeekCommand(b.api, db, chatID)
 				case commands.Commands.Settings.Name:
