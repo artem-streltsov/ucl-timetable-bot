@@ -17,6 +17,7 @@ import (
 
 var defaultDailyTime = "07:00"
 var defaultWeeklyTime = "SUN 18:00"
+var defaultReminderOffset = "15"
 var ukLocation, _ = time.LoadLocation("Europe/London")
 
 type Handler struct {
@@ -54,6 +55,9 @@ func (h *Handler) HandleCommand(chatID int64, cmd string) {
 	case "set_weekly_time":
 		h.updateUserState(chatID, "set_weekly_time")
 		h.sendMessage(chatID, "Send your weekly notification day and time. Example: SUN 18:00.")
+	case "set_reminder_offset":
+		h.updateUserState(chatID, "set_reminder_offset")
+		h.sendMessage(chatID, "Send your lectures reminder offset in minutes. Example: 15")
 	case "set_calendar":
 		h.updateUserState(chatID, "set_calendar")
 		h.sendMessage(chatID, "Send your Calendar link.\nIt can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy Calendar Link.\nIt must start with webcal://")
@@ -69,6 +73,8 @@ func (h *Handler) HandleMessage(chatID int64, text string) {
 		h.handleSetDailyTime(chatID, text)
 	case "set_weekly_time":
 		h.handleSetWeeklyTime(chatID, text)
+	case "set_reminder_offset":
+		h.handleSetReminderOffset(chatID, text)
 	case "set_calendar":
 		h.handleSetCalendar(chatID, text)
 	default:
@@ -195,7 +201,7 @@ func (h *Handler) sendTimetable(chatID int64, startDate, endDate time.Time, peri
 func (h *Handler) settings(chatID int64) {
 	user, _ := h.db.GetUser(chatID)
 	if user == nil {
-		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime}
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime, ReminderOffset: defaultReminderOffset}
 	}
 	h.sendMessage(chatID, fmt.Sprintf("Your settings:\nDaily notification time: %v\nWeekly notification day and time: %v", user.DailyTime, user.WeeklyTime))
 	if user.WebCalURL == "" {
@@ -210,7 +216,7 @@ func (h *Handler) handleSetCalendar(chatID int64, text string) {
 	}
 	user, _ := h.db.GetUser(chatID)
 	if user == nil {
-		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime}
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime, ReminderOffset: defaultReminderOffset}
 	}
 	user.WebCalURL = text
 	h.db.SaveUser(user)
@@ -226,7 +232,7 @@ func (h *Handler) handleSetDailyTime(chatID int64, text string) {
 	}
 	user, _ := h.db.GetUser(chatID)
 	if user == nil {
-		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime}
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime, ReminderOffset: defaultReminderOffset}
 	}
 	user.DailyTime = text
 	h.db.SaveUser(user)
@@ -243,11 +249,27 @@ func (h *Handler) handleSetWeeklyTime(chatID int64, text string) {
 	}
 	user, _ := h.db.GetUser(chatID)
 	if user == nil {
-		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime}
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime, ReminderOffset: defaultReminderOffset}
 	}
 	user.WeeklyTime = text
 	h.db.SaveUser(user)
 	h.scheduler.ScheduleUser(chatID)
 	h.sendMessage(chatID, "Weekly notification time saved.")
+	h.clearUserState(chatID)
+}
+
+func (h *Handler) handleSetReminderOffset(chatID int64, text string) {
+	if !utils.IsValidOffset(text) {
+		h.sendMessage(chatID, "Invalid format. Use MM format.")
+		return
+	}
+	user, _ := h.db.GetUser(chatID)
+	if user == nil {
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime, ReminderOffset: defaultReminderOffset}
+	}
+	user.ReminderOffset = text
+	h.db.SaveUser(user)
+	h.scheduler.ScheduleUser(chatID)
+	h.sendMessage(chatID, "Reminder offset saved.")
 	h.clearUserState(chatID)
 }

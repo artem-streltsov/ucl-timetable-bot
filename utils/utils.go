@@ -1,11 +1,26 @@
 package utils
 
 import (
+	"strconv"
 	"strings"
 	"time"
 )
 
 var ukLocation, _ = time.LoadLocation("Europe/London")
+
+func IsValidOffset(offsetStr string) bool {
+	if len(offsetStr) != 2 {
+		return false
+	}
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		return false
+	}
+	if offset >= 1 && offset <= 60 {
+		return true
+	}
+	return false
+}
 
 func IsValidTime(timeStr string) bool {
 	_, err := time.Parse("15:04", timeStr)
