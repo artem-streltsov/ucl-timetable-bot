@@ -17,6 +17,7 @@ import (
 
 var defaultDailyTime = "07:00"
 var defaultWeeklyTime = "SUN 18:00"
+var ukLocation, _ = time.LoadLocation("Europe/London")
 
 type Handler struct {
 	api        *tgbotapi.BotAPI
