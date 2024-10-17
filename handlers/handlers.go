@@ -102,16 +102,16 @@ func (h *Handler) clearUserState(chatID int64) {
 }
 
 func (h *Handler) today(chatID int64) {
-	h.sendTimetable(chatID, time.Now(), time.Now(), "today")
+	h.sendTimetable(chatID, time.Now().In(ukLocation), time.Now(), "today")
 }
 
 func (h *Handler) tomorrow(chatID int64) {
-	tomorrow := time.Now().AddDate(0, 0, 1)
+	tomorrow := time.Now().In(ukLocation).AddDate(0, 0, 1)
 	h.sendTimetable(chatID, tomorrow, tomorrow, "tomorrow")
 }
 
 func (h *Handler) week(chatID int64) {
-	now := time.Now()
+	now := time.Now().In(ukLocation)
 	weekday := now.Weekday()
 
 	var weekStart time.Time
