@@ -17,7 +17,7 @@ The UCL Timetable Bot is a Telegram bot that helps UCL students manage their lec
    - Use the `/start` command to begin
 
 3. **Set up your timetable:**
-   - Send your WebCal URL to the bot with the /set_calendar command
+   - Send your WebCal URL to the bot with the `/set_calendar` command
 
 ## Available Commands
 
