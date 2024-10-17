@@ -203,7 +203,7 @@ func (h *Handler) settings(chatID int64) {
 	if user == nil {
 		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime, ReminderOffset: defaultReminderOffset}
 	}
-	h.sendMessage(chatID, fmt.Sprintf("Your settings:\nDaily notification time: %v\nWeekly notification day and time: %v", user.DailyTime, user.WeeklyTime))
+	h.sendMessage(chatID, fmt.Sprintf("Your settings:\nDaily notification time: %v\nWeekly notification day and time: %v\n Reminder offset: %v minutes", user.DailyTime, user.WeeklyTime, user.ReminderOffset))
 	if user.WebCalURL == "" {
 		h.sendMessage(chatID, "Your Calendar link is not set. Use /set_calendar to set it.")
 	}

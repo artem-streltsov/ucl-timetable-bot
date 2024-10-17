@@ -3,6 +3,7 @@ package scheduler
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,8 +23,10 @@ type Scheduler struct {
 }
 
 type UserTimers struct {
-	dailyTimer  *time.Timer
-	weeklyTimer *time.Timer
+	dailyTimer       *time.Timer
+	weeklyTimer      *time.Timer
+	lectureTimers    []*time.Timer
+	lectureScheduler *time.Timer
 }
 
 func NewScheduler(api *tgbotapi.BotAPI, db *database.DB) *Scheduler {
@@ -49,12 +52,15 @@ func (s *Scheduler) ScheduleUser(chatID int64) {
 
 	s.CancelUser(chatID)
 
+	s.timers[chatID] = &UserTimers{}
+
 	dailyTime := utils.GetNextTime(user.DailyTime)
 	dailyDuration := time.Until(dailyTime)
 	dailyTimer := time.AfterFunc(dailyDuration, func() {
 		s.sendDailyTimetable(chatID)
 		s.ScheduleUser(chatID)
 	})
+	s.timers[chatID].dailyTimer = dailyTimer
 
 	weeklyTime := utils.GetNextWeekTime(user.WeeklyTime)
 	weeklyDuration := time.Until(weeklyTime)
@@ -62,11 +68,73 @@ func (s *Scheduler) ScheduleUser(chatID int64) {
 		s.sendWeeklyTimetable(chatID)
 		s.ScheduleUser(chatID)
 	})
+	s.timers[chatID].weeklyTimer = weeklyTimer
 
-	s.timers[chatID] = &UserTimers{
-		dailyTimer:  dailyTimer,
-		weeklyTimer: weeklyTimer,
+	s.scheduleLectureRemindersAtMidnight(chatID)
+}
+
+func (s *Scheduler) scheduleLectureRemindersAtMidnight(chatID int64) {
+	now := time.Now().In(ukLocation)
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 1, 0, ukLocation).AddDate(0, 0, 1)
+	durationUntilMidnight := time.Until(midnight)
+
+	lectureScheduler := time.AfterFunc(durationUntilMidnight, func() {
+		s.scheduleLectureReminders(chatID)
+		s.scheduleLectureRemindersAtMidnight(chatID)
+	})
+	s.timers[chatID].lectureScheduler = lectureScheduler
+
+	s.scheduleLectureReminders(chatID)
+}
+
+func (s *Scheduler) scheduleLectureReminders(chatID int64) {
+	if s.timers[chatID] != nil {
+		for _, timer := range s.timers[chatID].lectureTimers {
+			timer.Stop()
+		}
+		s.timers[chatID].lectureTimers = nil
 	}
+
+	user, _ := s.db.GetUser(chatID)
+	if user == nil || user.WebCalURL == "" {
+		return
+	}
+
+	cal, err := timetable.FetchCalendar(user.WebCalURL)
+	if err != nil {
+		return
+	}
+
+	day := time.Now().In(ukLocation)
+	lectures, err := timetable.GetLectures(cal, day)
+	if err != nil || len(lectures) == 0 {
+		return
+	}
+
+	offsetMinutes, err := strconv.Atoi(user.ReminderOffset)
+	if err != nil {
+		offsetMinutes = 15
+	}
+
+	timers := []*time.Timer{}
+	now := time.Now().In(ukLocation)
+
+	for _, lecture := range lectures {
+		reminderTime := lecture.Start.Add(-time.Duration(offsetMinutes) * time.Minute)
+		if reminderTime.After(now) {
+			duration := time.Until(reminderTime)
+			timer := time.AfterFunc(duration, func() {
+				reminderMessage := fmt.Sprintf("⏰ *%s* in %d minutes at %s",
+					timetable.CleanTitle(lecture.Title),
+					offsetMinutes,
+					lecture.Location,
+				)
+				s.sendMessage(chatID, reminderMessage)
+			})
+			timers = append(timers, timer)
+		}
+	}
+	s.timers[chatID].lectureTimers = timers
 }
 
 func (s *Scheduler) sendDailyTimetable(chatID int64) {
@@ -158,6 +226,12 @@ func (s *Scheduler) CancelUser(chatID int64) {
 		}
 		if timers.weeklyTimer != nil {
 			timers.weeklyTimer.Stop()
+		}
+		if timers.lectureScheduler != nil {
+			timers.lectureScheduler.Stop()
+		}
+		for _, timer := range timers.lectureTimers {
+			timer.Stop()
 		}
 		delete(s.timers, chatID)
 	}
