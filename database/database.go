@@ -2,7 +2,11 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -23,16 +27,31 @@ func New(dbPath string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, err = dbConn.Exec(`CREATE TABLE IF NOT EXISTS users (
-		chat_id INTEGER PRIMARY KEY, 
-		webcal_url TEXT, 
-		daily_time TEXT, 
-		weekly_time TEXT
-	)`)
-	if err != nil {
+	if err := runMigrations(dbConn); err != nil {
 		return nil, err
 	}
 	return &DB{conn: dbConn}, nil
+}
+
+func runMigrations(db *sql.DB) error {
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
+	if err != nil {
+		return fmt.Errorf("could not create migration driver: %v", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://migrations",
+		"sqlite3", driver)
+	if err != nil {
+		return fmt.Errorf("could not create migration instance: %v", err)
+	}
+
+	err = m.Up()
+	if err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("migration failed: %v", err)
+	}
+
+	return nil
 }
 
 func (db *DB) Close() error {
