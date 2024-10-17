@@ -13,6 +13,8 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
+var ukLocation, _ = time.LoadLocation("Europe/London")
+
 type Scheduler struct {
 	api    *tgbotapi.BotAPI
 	db     *database.DB
@@ -79,7 +81,7 @@ func (s *Scheduler) sendDailyTimetable(chatID int64) {
 		return
 	}
 
-	day := time.Now()
+	day := time.Now().In(ukLocation)
 	lectures, err := timetable.GetLectures(cal, day)
 	if err != nil {
 		s.sendMessage(chatID, "Error processing calendar: "+err.Error())
@@ -106,7 +108,7 @@ func (s *Scheduler) sendWeeklyTimetable(chatID int64) {
 		return
 	}
 
-	now := time.Now()
+	now := time.Now().In(ukLocation)
 	weekday := int(now.Weekday())
 	if weekday == 0 {
 		weekday = 7 // make Sunday 7
