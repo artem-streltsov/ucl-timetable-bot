@@ -29,6 +29,7 @@ The UCL Timetable Bot is a Telegram bot that helps UCL students manage their lec
 - `/settings`: View and update your notification settings
 - `/set_daily_time`: Set the time for daily notifications
 - `/set_weekly_time`: Set the day and time for weekly notifications
+- `/set_reminder_offset`: Set the offset in minutes for reminders before lectures
 
 ## Configuring Notifications
 
@@ -42,6 +43,7 @@ To configure these notifications:
 1. Use `/settings` to view your current notification settings
 2. Use `/set_daily_time` to set when you receive daily summaries
 3. Use `/set_weekly_time` to set when you receive weekly summaries
+4. Use `/set_reminder_offset` to set when you receive lecture reminders
 
 ## Time Zone Information
 
