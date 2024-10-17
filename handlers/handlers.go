@@ -1,383 +1,252 @@
 package handlers
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/artem-streltsov/ucl-timetable-bot/common"
 	"github.com/artem-streltsov/ucl-timetable-bot/database"
-	"github.com/artem-streltsov/ucl-timetable-bot/notifications"
 	"github.com/artem-streltsov/ucl-timetable-bot/scheduler"
+	"github.com/artem-streltsov/ucl-timetable-bot/timetable"
+	"github.com/artem-streltsov/ucl-timetable-bot/utils"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func HandleStartCommand(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with `webcal://`. It can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy the WebCal link")
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending start message: %v", err)
+var defaultDailyTime = "07:00"
+var defaultWeeklyTime = "SUN 18:00"
+
+type Handler struct {
+	api        *tgbotapi.BotAPI
+	db         *database.DB
+	scheduler  *scheduler.Scheduler
+	userStates map[int64]string
+	mu         sync.RWMutex
+}
+
+func NewHandler(api *tgbotapi.BotAPI, db *database.DB, scheduler *scheduler.Scheduler) *Handler {
+	return &Handler{
+		api:        api,
+		db:         db,
+		scheduler:  scheduler,
+		userStates: make(map[int64]string),
 	}
 }
 
-func ValidateWebCalLink(webcalURL string) (string, bool) {
-	webcalURL = strings.ToLower(webcalURL)
-	if !strings.HasPrefix(webcalURL, "webcal://") {
-		return "", false
-	}
-	return strings.Replace(webcalURL, "webcal://", "https://", 1), true
-}
-
-func HandleSetWebCalPrompt(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please provide your WebCal link to subscribe to your lecture timetable. The link should start with `webcal://`. It can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy the WebCal link")
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending WebCal prompt: %v", err)
-	}
-}
-
-func HandleWebCalLink(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) bool {
-	validWebCalURL, valid := ValidateWebCalLink(webcalURL)
-	if !valid {
-		msg := bot.NewMessage(chatID, "Invalid link! Please provide a valid WebCal link that starts with 'webcal://'.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending invalid link message: %v", err)
-		}
-		return false
-	}
-
-	if err := database.InsertUser(db, chatID, validWebCalURL); err != nil {
-		log.Printf("Error saving WebCal link: %v", err)
-		msg := bot.NewMessage(chatID, "There was an error saving your WebCal link. Please try again.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return false
-	}
-
-	msg := bot.NewMessage(chatID, "Thank you! You will start receiving daily and weekly updates for your lectures.\nUse /settings to configure your notification preferences.")
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending confirmation message: %v", err)
-	}
-
-	if err := SendNotifications(bot, db, chatID, validWebCalURL); err != nil {
-		log.Printf("Error sending initial notifications: %v", err)
-	}
-
-	if err := ScheduleNotifications(bot, db, chatID); err != nil {
-		log.Printf("Error scheduling notifications: %v", err)
-	}
-
-	return true
-}
-
-func SendNotifications(bot common.BotAPI, db *sql.DB, chatID int64, webcalURL string) error {
-	if err := notifications.SendWeeklySummary(bot, db, chatID, webcalURL); err != nil {
-		return fmt.Errorf("error sending weekly summary: %w", err)
-	}
-
-	currentWeekday := time.Now().UTC().Weekday()
-	if currentWeekday != time.Sunday && currentWeekday != time.Saturday {
-		if err := notifications.SendDailySummary(bot, db, chatID, webcalURL); err != nil {
-			return fmt.Errorf("error sending daily summary: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func ScheduleNotifications(bot common.BotAPI, db *sql.DB, chatID int64) error {
-	if err := scheduler.ScheduleDailySummary(bot, db, chatID); err != nil {
-		return fmt.Errorf("error scheduling daily summary: %w", err)
-	}
-
-	if err := scheduler.ScheduleWeeklySummary(bot, db, chatID); err != nil {
-		return fmt.Errorf("error scheduling weekly summary: %w", err)
-	}
-
-	return nil
-}
-
-func HandleTodayCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
-	webcalURL, err := database.GetWebCalURL(db, chatID)
-	if err != nil {
-		log.Printf("Error fetching WebCal URL: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while fetching your timetable. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return
-	}
-
-	if webcalURL == "" {
-		msg := bot.NewMessage(chatID, "You haven't provided a WebCal link yet. Please use the /start command to set up your timetable.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending WebCal not found message: %v", err)
-		}
-		return
-	}
-
-	if err := notifications.SendDailySummary(bot, db, chatID, webcalURL); err != nil {
-		log.Printf("Error sending daily summary: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while fetching today's lectures. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-	}
-}
-
-func HandleTomorrowCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
-	webcalURL, err := database.GetWebCalURL(db, chatID)
-	if err != nil {
-		log.Printf("Error fetching WebCal URL: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while fetching your timetable. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return
-	}
-
-	if webcalURL == "" {
-		msg := bot.NewMessage(chatID, "You haven't provided a WebCal link yet. Please use the /start command to set up your timetable.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending WebCal not found message: %v", err)
-		}
-		return
-	}
-
-	if err := notifications.SendTomorrowSummary(bot, db, chatID, webcalURL); err != nil {
-		log.Printf("Error sending tomorrow summary: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while fetching tomorrow's lectures. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-	}
-}
-
-func HandleWeekCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
-	webcalURL, err := database.GetWebCalURL(db, chatID)
-	if err != nil {
-		log.Printf("Error fetching WebCal URL: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while fetching your timetable. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return
-	}
-
-	if webcalURL == "" {
-		msg := bot.NewMessage(chatID, "You haven't provided a WebCal link yet. Please use the /start command to set up your timetable.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending WebCal not found message: %v", err)
-		}
-		return
-	}
-
-	if err := notifications.SendWeeklySummary(bot, db, chatID, webcalURL); err != nil {
-		log.Printf("Error sending weekly summary: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while fetching this week's lectures. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-	}
-}
-
-func HandleSettingsCommand(bot common.BotAPI, db *sql.DB, chatID int64) {
-	dailyNotificationTime, weeklyNotificationTime, reminderOffset, err := database.GetUserPreferences(db, chatID)
-	if err != nil {
-		log.Printf("Error fetching user preferences: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while fetching your settings. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return
-	}
-
-	settingsMessage := fmt.Sprintf("Current Settings (all times are in UK time):\n"+
-		"Daily Notification Time: %s\n"+
-		"Weekly Notification Time: %s\n"+
-		"Reminder Offset: %d minutes\n\n"+
-		"To update your settings, use the following commands:\n"+
-		"/set_daily_time\n"+
-		"/set_weekly_time\n"+
-		"/set_reminder_offset",
-		dailyNotificationTime, weeklyNotificationTime, reminderOffset)
-
-	msg := bot.NewMessage(chatID, settingsMessage)
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending settings message: %v", err)
-	}
-}
-
-func HandleSetDailyTimePrompt(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please enter the time for daily notifications in HH:MM format (24-hour). All times are in UK time.")
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending daily time prompt: %v", err)
-	}
-}
-
-func HandleSetWeeklyTimePrompt(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please enter the day and time for weekly notifications in the format DAY HH:MM (e.g., SUN 18:00). All times are in UK time.")
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending weekly time prompt: %v", err)
-	}
-}
-
-func HandleSetReminderOffsetPrompt(bot common.BotAPI, chatID int64) {
-	msg := bot.NewMessage(chatID, "Please enter the reminder offset in minutes (e.g., 30 for 30 minutes before the lecture).")
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending reminder offset prompt: %v", err)
-	}
-}
-
-func HandleSetDailyTime(bot common.BotAPI, db *sql.DB, chatID int64, timeStr string) bool {
-	if _, err := time.Parse("15:04", timeStr); err != nil {
-		msg := bot.NewMessage(chatID, "Invalid time format. Please use HH:MM (24-hour format).")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending invalid time format message: %v", err)
-		}
-		return false
-	}
-
-	if err := UpdateUserPreference(db, chatID, "dailyNotificationTime", timeStr, "", 0); err != nil {
-		log.Printf("Error updating daily notification time: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while updating your settings. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return false
-	}
-
-	if err := scheduler.StopAndRescheduleNotifications(bot, db, chatID); err != nil {
-		log.Printf("Error rescheduling notifications: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while rescheduling your notifications. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return false
-	}
-
-	msg := bot.NewMessage(chatID, fmt.Sprintf("Daily notification time updated to %s (UK time)", timeStr))
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending confirmation message: %v", err)
-	}
-
-	return true
-}
-
-func HandleSetWeeklyTime(bot common.BotAPI, db *sql.DB, chatID int64, dayAndTime string) bool {
-	parts := strings.Split(dayAndTime, " ")
-	if len(parts) != 2 {
-		msg := bot.NewMessage(chatID, "Invalid format. Please use DAY HH:MM (e.g., SUN 18:00).")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending invalid format message: %v", err)
-		}
-		return false
-	}
-
-	day := strings.ToUpper(parts[0])
-	timeStr := parts[1]
-
-	if !isValidDay(day) || !isValidTime(timeStr) {
-		msg := bot.NewMessage(chatID, "Invalid day or time format. Please use a valid day (MON, TUE, WED, THU, FRI, SAT, SUN) and time in HH:MM format.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending invalid day or time format message: %v", err)
-		}
-		return false
-	}
-
-	if err := UpdateUserPreference(db, chatID, "weeklyNotificationTime", "", fmt.Sprintf("%s %s", day, timeStr), 0); err != nil {
-		log.Printf("Error updating weekly notification time: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while updating your settings. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return false
-	}
-
-	if err := scheduler.StopAndRescheduleNotifications(bot, db, chatID); err != nil {
-		log.Printf("Error rescheduling notifications: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while rescheduling your notifications. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return false
-	}
-
-	msg := bot.NewMessage(chatID, fmt.Sprintf("Weekly notification time updated to %s %s (UK time)", day, timeStr))
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending confirmation message: %v", err)
-	}
-
-	return true
-}
-
-func HandleSetReminderOffset(bot common.BotAPI, db *sql.DB, chatID int64, offsetStr string) bool {
-	offset, err := time.ParseDuration(offsetStr + "m")
-	if err != nil || offset < 0 {
-		msg := bot.NewMessage(chatID, "Invalid offset. Please provide a positive number of minutes.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending invalid offset message: %v", err)
-		}
-		return false
-	}
-
-	if err := UpdateUserPreference(db, chatID, "reminderOffset", "", "", int(offset.Minutes())); err != nil {
-		log.Printf("Error updating reminder offset: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while updating your settings. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return false
-	}
-
-	if err := scheduler.StopAndRescheduleNotifications(bot, db, chatID); err != nil {
-		log.Printf("Error rescheduling notifications: %v", err)
-		msg := bot.NewMessage(chatID, "An error occurred while rescheduling your notifications. Please try again later.")
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("Error sending error message: %v", err)
-		}
-		return false
-	}
-
-	msg := bot.NewMessage(chatID, fmt.Sprintf("Reminder offset updated to %d minutes", int(offset.Minutes())))
-	if _, err := bot.Send(msg); err != nil {
-		log.Printf("Error sending confirmation message: %v", err)
-	}
-
-	return true
-}
-
-func UpdateUserPreference(db *sql.DB, chatID int64, field string, dailyTime, weeklyTime string, reminderOffset int) error {
-	currentDailyTime, currentWeeklyTime, currentReminderOffset, err := database.GetUserPreferences(db, chatID)
-	if err != nil {
-		return err
-	}
-
-	switch field {
-	case "dailyNotificationTime":
-		currentDailyTime = dailyTime
-	case "weeklyNotificationTime":
-		currentWeeklyTime = weeklyTime
-	case "reminderOffset":
-		currentReminderOffset = reminderOffset
-	case "all":
-		return database.UpdateUserPreferences(db, chatID, dailyTime, weeklyTime, reminderOffset)
+func (h *Handler) HandleCommand(chatID int64, cmd string) {
+	switch cmd {
+	case "start":
+		h.sendMessage(chatID, "Welcome! Use /set\\_calendar to set your Calendar link.")
+	case "today":
+		h.today(chatID)
+	case "tomorrow":
+		h.tomorrow(chatID)
+	case "week":
+		h.week(chatID)
+	case "settings":
+		h.settings(chatID)
+	case "set_daily_time":
+		h.updateUserState(chatID, "set_daily_time")
+		h.sendMessage(chatID, "Send your daily notification time. Example: 07:00.")
+	case "set_weekly_time":
+		h.updateUserState(chatID, "set_weekly_time")
+		h.sendMessage(chatID, "Send your weekly notification day and time. Example: SUN 18:00.")
+	case "set_calendar":
+		h.updateUserState(chatID, "set_calendar")
+		h.sendMessage(chatID, "Send your Calendar link.\nIt can be found in Portico -> My Studies -> Timetable -> Add to Calendar -> Copy Calendar Link.\nIt must start with webcal://")
 	default:
-		return fmt.Errorf("invalid preference field: %s", field)
+		h.sendMessage(chatID, "Unknown command. Use commands from the menu.")
 	}
-
-	return database.UpdateUserPreferences(db, chatID, currentDailyTime, currentWeeklyTime, currentReminderOffset)
 }
 
-func isValidDay(day string) bool {
-	validDays := map[string]bool{
-		"MON": true, "TUE": true, "WED": true, "THU": true,
-		"FRI": true, "SAT": true, "SUN": true,
+func (h *Handler) HandleMessage(chatID int64, text string) {
+	state := h.getUserState(chatID)
+	switch state {
+	case "set_daily_time":
+		h.handleSetDailyTime(chatID, text)
+	case "set_weekly_time":
+		h.handleSetWeeklyTime(chatID, text)
+	case "set_calendar":
+		h.handleSetCalendar(chatID, text)
+	default:
+		h.sendMessage(chatID, "Please use commands from the menu to interact with the bot.")
 	}
-	return validDays[day]
 }
 
-func isValidTime(timeStr string) bool {
-	_, err := time.Parse("15:04", timeStr)
-	return err == nil
+func (h *Handler) sendMessage(chatID int64, text string) {
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
+	if _, err := h.api.Send(msg); err != nil {
+		log.Printf("Error sending message: %v", err)
+	}
+}
+
+func (h *Handler) updateUserState(chatID int64, state string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.userStates[chatID] = state
+}
+
+func (h *Handler) getUserState(chatID int64) string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.userStates[chatID]
+}
+
+func (h *Handler) clearUserState(chatID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.userStates, chatID)
+}
+
+func (h *Handler) today(chatID int64) {
+	h.sendTimetable(chatID, time.Now(), time.Now(), "today")
+}
+
+func (h *Handler) tomorrow(chatID int64) {
+	tomorrow := time.Now().AddDate(0, 0, 1)
+	h.sendTimetable(chatID, tomorrow, tomorrow, "tomorrow")
+}
+
+func (h *Handler) week(chatID int64) {
+	now := time.Now()
+	weekday := now.Weekday()
+
+	var weekStart time.Time
+	var weekEnd time.Time
+	var period string
+
+	if weekday == time.Saturday {
+		daysUntilMonday := (time.Monday + 7 - weekday) % 7
+		weekStart = now.AddDate(0, 0, int(daysUntilMonday))
+		period = "next week"
+	} else if weekday == time.Sunday {
+		daysUntilMonday := (time.Monday + 7 - weekday) % 7
+		weekStart = now.AddDate(0, 0, int(daysUntilMonday))
+		period = "next week"
+	} else {
+		daysSinceMonday := (weekday - time.Monday + 7) % 7
+		weekStart = now.AddDate(0, 0, -int(daysSinceMonday))
+		period = "this week"
+	}
+
+	weekEnd = weekStart.AddDate(0, 0, 4) // Friday
+
+	h.sendTimetable(chatID, weekStart, weekEnd, period)
+}
+
+func (h *Handler) sendTimetable(chatID int64, startDate, endDate time.Time, period string) {
+	user, _ := h.db.GetUser(chatID)
+	if user == nil || user.WebCalURL == "" {
+		h.sendMessage(chatID, "Please set your calendar link using /set_calendar")
+		return
+	}
+	cal, err := timetable.FetchCalendar(user.WebCalURL)
+	if err != nil {
+		h.sendMessage(chatID, "Error fetching calendar")
+		return
+	}
+
+	if startDate.Day() == endDate.Day() {
+		lectures, err := timetable.GetLectures(cal, startDate)
+		if err != nil {
+			h.sendMessage(chatID, "Error processing calendar")
+			return
+		}
+		if len(lectures) == 0 {
+			h.sendMessage(chatID, fmt.Sprintf("No lectures %s.", period))
+			return
+		}
+		dateStr := startDate.Format("Mon, 02 Jan")
+		message := fmt.Sprintf("*%s:*\n\n", dateStr) + timetable.FormatLectures(lectures)
+		h.sendMessage(chatID, message)
+	} else {
+		lecturesMap, err := timetable.GetLecturesInRange(cal, startDate, endDate)
+		if err != nil {
+			h.sendMessage(chatID, "Error processing calendar: "+err.Error())
+			return
+		}
+		if len(lecturesMap) == 0 {
+			h.sendMessage(chatID, fmt.Sprintf("No lectures %s.", period))
+			return
+		}
+		startDateStr := startDate.Format("Mon, 02 Jan")
+		endDateStr := endDate.Format("Fri, 02 Jan")
+		dateRangeStr := fmt.Sprintf("*%s - %s:*\n\n", startDateStr, endDateStr)
+
+		var sb strings.Builder
+		sb.WriteString(dateRangeStr)
+		for day := startDate; !day.After(endDate); day = day.AddDate(0, 0, 1) {
+			dayKey := day.Format("Monday")
+			lectures, ok := lecturesMap[dayKey]
+			if ok {
+				sb.WriteString("\n" + "*" + dayKey + "*" + "\n")
+				message := timetable.FormatLectures(lectures)
+				sb.WriteString(message)
+			}
+		}
+		h.sendMessage(chatID, sb.String())
+	}
+}
+
+func (h *Handler) settings(chatID int64) {
+	user, _ := h.db.GetUser(chatID)
+	if user == nil {
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime}
+	}
+	h.sendMessage(chatID, fmt.Sprintf("Your settings:\nDaily notification time: %v\nWeekly notification day and time: %v", user.DailyTime, user.WeeklyTime))
+	if user.WebCalURL == "" {
+		h.sendMessage(chatID, "Your Calendar link is not set. Use /set_calendar to set it.")
+	}
+}
+
+func (h *Handler) handleSetCalendar(chatID int64, text string) {
+	if !strings.HasPrefix(strings.ToLower(text), "webcal://") {
+		h.sendMessage(chatID, "Calendar link must start with webcal://")
+		return
+	}
+	user, _ := h.db.GetUser(chatID)
+	if user == nil {
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime}
+	}
+	user.WebCalURL = text
+	h.db.SaveUser(user)
+	h.scheduler.ScheduleUser(chatID)
+	h.sendMessage(chatID, "Calendar link saved.")
+	h.clearUserState(chatID)
+}
+
+func (h *Handler) handleSetDailyTime(chatID int64, text string) {
+	if !utils.IsValidTime(text) {
+		h.sendMessage(chatID, "Invalid format. Use HH:MM format.")
+		return
+	}
+	user, _ := h.db.GetUser(chatID)
+	if user == nil {
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime}
+	}
+	user.DailyTime = text
+	h.db.SaveUser(user)
+	h.scheduler.ScheduleUser(chatID)
+	h.sendMessage(chatID, "Daily notification time saved.")
+	h.clearUserState(chatID)
+}
+
+func (h *Handler) handleSetWeeklyTime(chatID int64, text string) {
+	parts := strings.SplitN(text, " ", 2)
+	if len(parts) != 2 || !utils.IsValidDay(parts[0]) || !utils.IsValidTime(parts[1]) {
+		h.sendMessage(chatID, "Invalid format. Use DAY HH:MM.")
+		return
+	}
+	user, _ := h.db.GetUser(chatID)
+	if user == nil {
+		user = &database.User{ChatID: chatID, DailyTime: defaultDailyTime, WeeklyTime: defaultWeeklyTime}
+	}
+	user.WeeklyTime = text
+	h.db.SaveUser(user)
+	h.scheduler.ScheduleUser(chatID)
+	h.sendMessage(chatID, "Weekly notification time saved.")
+	h.clearUserState(chatID)
 }

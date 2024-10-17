@@ -1,77 +1,66 @@
 package utils
 
 import (
-	"fmt"
+	"strings"
 	"time"
 )
 
-var ukLocation *time.Location
+func IsValidTime(timeStr string) bool {
+	_, err := time.Parse("15:04", timeStr)
+	return err == nil
+}
 
-func init() {
-	var err error
-	ukLocation, err = time.LoadLocation("Europe/London")
-	if err != nil {
-		panic("Failed to load UK time zone: " + err.Error())
+func IsValidDay(dayStr string) bool {
+	days := []string{"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}
+	dayStr = strings.ToUpper(dayStr)
+	for _, day := range days {
+		if day == dayStr {
+			return true
+		}
 	}
+	return false
 }
 
-func ParseTimeUK(timeStr string) (time.Time, error) {
-	if timeStr == "" {
-		return time.Time{}, nil
+func GetNextTime(timeStr string) time.Time {
+	now := time.Now()
+	parsedTime, _ := time.Parse("15:04", timeStr)
+	nextTime := time.Date(now.Year(), now.Month(), now.Day(), parsedTime.Hour(), parsedTime.Minute(), 0, 0, now.Location())
+	if nextTime.Before(now) {
+		nextTime = nextTime.Add(24 * time.Hour)
 	}
-	t, err := time.Parse(time.RFC3339, timeStr)
-	if err != nil {
-		return time.Time{}, err
+	return nextTime
+}
+
+func GetNextWeekTime(weekTimeStr string) time.Time {
+	parts := strings.SplitN(weekTimeStr, " ", 2)
+	dayStr, timeStr := parts[0], parts[1]
+	weekday := getWeekday(dayStr)
+	now := time.Now()
+	parsedTime, _ := time.Parse("15:04", timeStr)
+	nextTime := time.Date(now.Year(), now.Month(), now.Day(), parsedTime.Hour(), parsedTime.Minute(), 0, 0, now.Location())
+	for nextTime.Weekday() != weekday || nextTime.Before(now) {
+		nextTime = nextTime.Add(24 * time.Hour)
 	}
-	return t.In(ukLocation), nil
+	return nextTime
 }
 
-func CurrentTimeUK() time.Time {
-	return time.Now().In(ukLocation)
-}
-
-func TimeToEpoch(t time.Time) int64 {
-	return t.Unix()
-}
-
-func EpochToTimeUK(epoch int64) time.Time {
-	return time.Unix(epoch, 0).In(ukLocation)
-}
-
-func IsZeroEpoch(epoch int64) bool {
-	return epoch == 0
-}
-
-func CurrentTimeEpoch() int64 {
-	return time.Now().Unix()
-}
-
-func GetUKLocation() *time.Location {
-	return ukLocation
-}
-
-func GetDayWithSuffix(day int) string {
-	if day >= 11 && day <= 13 {
-		return fmt.Sprintf("%dth", day)
-	}
-	switch day % 10 {
-	case 1:
-		return fmt.Sprintf("%dst", day)
-	case 2:
-		return fmt.Sprintf("%dnd", day)
-	case 3:
-		return fmt.Sprintf("%drd", day)
+func getWeekday(dayStr string) time.Weekday {
+	switch strings.ToUpper(dayStr) {
+	case "MON":
+		return time.Monday
+	case "TUE":
+		return time.Tuesday
+	case "WED":
+		return time.Wednesday
+	case "THU":
+		return time.Thursday
+	case "FRI":
+		return time.Friday
+	case "SAT":
+		return time.Saturday
+	case "SUN":
+		return time.Sunday
 	default:
-		return fmt.Sprintf("%dth", day)
+		return time.Sunday
 	}
-}
-
-func FormatWeekRange(monday, friday time.Time) string {
-	daySuffixMonday := GetDayWithSuffix(monday.Day())
-	daySuffixFriday := GetDayWithSuffix(friday.Day())
-
-	formattedMonday := monday.Format("Mon,") + " " + daySuffixMonday + " " + monday.Format("Jan")
-	formattedFriday := friday.Format("Fri,") + " " + daySuffixFriday + " " + friday.Format("Jan")
-
-	return fmt.Sprintf("%s - %s", formattedMonday, formattedFriday)
 }

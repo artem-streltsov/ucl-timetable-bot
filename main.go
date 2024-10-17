@@ -10,7 +10,6 @@ import (
 	"github.com/artem-streltsov/ucl-timetable-bot/bot"
 	"github.com/artem-streltsov/ucl-timetable-bot/config"
 	"github.com/artem-streltsov/ucl-timetable-bot/database"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
@@ -19,51 +18,31 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	db, err := database.InitDB(cfg.DBPath)
+	db, err := database.New(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
 
-	backupManager, err := database.InitBackupManager(db, cfg)
-	if err != nil {
-		log.Fatalf("Failed to initialize backup manager: %v", err)
-	}
+	ctx, cancel := context.WithCancel(context.Background())
 
-	bot, err := bot.InitBot(cfg.TelegramBotToken, db)
+	botInstance, err := bot.NewBot(cfg.TelegramBotToken, db)
 	if err != nil {
 		log.Fatalf("Failed to initialize bot: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Println("Starting the bot...")
-		if err := bot.Run(ctx, db); err != nil {
-			log.Printf("Error running bot: %v", err)
-			cancel()
-		}
+		<-sigChan
+		log.Println("Received shutdown signal")
+		cancel()
 	}()
 
-	log.Println("Starting scheduled backups...")
-	backupManager.StartBackups()
-
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case sig := <-signalChan:
-		log.Printf("Received signal: %v", sig)
-	case <-ctx.Done():
-		log.Println("Context canceled")
+	if err := botInstance.Run(ctx); err != nil {
+		log.Fatalf("Bot stopped with error: %v", err)
 	}
 
-	if err := backupManager.PerformBackup(); err != nil {
-		log.Printf("Error performing final backup: %v", err)
-	} else {
-		log.Println("Final backup completed successfully")
-	}
-
-	log.Println("Shutting down...")
+	log.Println("Bot has been shut down")
 }
