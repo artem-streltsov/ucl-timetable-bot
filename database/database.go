@@ -16,6 +16,7 @@ type DB struct {
 
 type User struct {
 	ChatID         int64
+	Username       string
 	WebCalURL      string
 	DailyTime      string
 	WeeklyTime     string
@@ -59,9 +60,9 @@ func (db *DB) Close() error {
 }
 
 func (db *DB) GetUser(chatID int64) (*User, error) {
-	row := db.conn.QueryRow(`SELECT chat_id, webcal_url, daily_time, weekly_time, reminder_offset FROM users WHERE chat_id = ?`, chatID)
+	row := db.conn.QueryRow(`SELECT chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset FROM users WHERE chat_id = ?`, chatID)
 	var user User
-	err := row.Scan(&user.ChatID, &user.WebCalURL, &user.DailyTime, &user.WeeklyTime, &user.ReminderOffset)
+	err := row.Scan(&user.ChatID, &user.Username, &user.WebCalURL, &user.DailyTime, &user.WeeklyTime, &user.ReminderOffset)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -69,19 +70,20 @@ func (db *DB) GetUser(chatID int64) (*User, error) {
 }
 
 func (db *DB) SaveUser(user *User) error {
-	_, err := db.conn.Exec(`INSERT INTO users (chat_id, webcal_url, daily_time, weekly_time, reminder_offset) 
-		VALUES (?, ?, ?, ?, ?) 
+	_, err := db.conn.Exec(`INSERT INTO users (chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset) 
+		VALUES (?, ?, ?, ?, ?, ?) 
 		ON CONFLICT(chat_id) DO UPDATE SET 
+			username=excluded.username, 
 			webcal_url=excluded.webcal_url, 
 			daily_time=excluded.daily_time, 
 			weekly_time=excluded.weekly_time,
             reminder_offset=excluded.reminder_offset`,
-		user.ChatID, user.WebCalURL, user.DailyTime, user.WeeklyTime, user.ReminderOffset)
+		user.ChatID, user.Username, user.WebCalURL, user.DailyTime, user.WeeklyTime, user.ReminderOffset)
 	return err
 }
 
 func (db *DB) GetAllUsers() ([]*User, error) {
-	rows, err := db.conn.Query(`SELECT chat_id, webcal_url, daily_time, weekly_time, reminder_offset FROM users`)
+	rows, err := db.conn.Query(`SELECT chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset FROM users`)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +92,7 @@ func (db *DB) GetAllUsers() ([]*User, error) {
 	var users []*User
 	for rows.Next() {
 		var user User
-		err := rows.Scan(&user.ChatID, &user.WebCalURL, &user.DailyTime, &user.WeeklyTime, &user.ReminderOffset)
+		err := rows.Scan(&user.ChatID, &user.Username, &user.WebCalURL, &user.DailyTime, &user.WeeklyTime, &user.ReminderOffset)
 		if err != nil {
 			return nil, err
 		}
