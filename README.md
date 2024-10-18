@@ -27,6 +27,8 @@ The UCL Timetable Bot is a Telegram bot that helps UCL students manage their lec
 - `/tomorrow`: Get tomorrow's lecture schedule
 - `/week`: Get this week's lecture schedule
 - `/settings`: View and update your notification settings
+- `/add_friend`: Add a friend by username
+- `/accept_friend`: Accept friend request
 - `/set_daily_time`: Set the time for daily notifications
 - `/set_weekly_time`: Set the day and time for weekly notifications
 - `/set_reminder_offset`: Set the offset in minutes for reminders before lectures
