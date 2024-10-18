@@ -33,10 +33,11 @@ The UCL Timetable Bot is a Telegram bot that helps UCL students manage their lec
 
 ## Configuring Notifications
 
-The bot offers two types of notifications:
+The bot offers three types of notifications:
 
 1. **Daily Summary**: A daily overview of your lectures
 2. **Weekly Summary**: A weekly overview of your lectures
+3. **Lecture reminders**: A reminder x minutes before your lectures
 
 To configure these notifications:
 
