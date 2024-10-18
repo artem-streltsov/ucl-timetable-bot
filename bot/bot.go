@@ -52,15 +52,18 @@ func (b *Bot) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			if update.Message == nil {
-				continue
+			if cb := update.CallbackQuery; cb != nil {
+				b.handler.HandleCallbackQuery(cb)
+				return nil
 			}
-			username := update.Message.From.UserName
-			if update.Message.IsCommand() {
-				cmd := update.Message.Command()
-				b.handler.HandleCommand(update.Message.Chat.ID, cmd, username)
-			} else {
-				b.handler.HandleMessage(update.Message.Chat.ID, update.Message.Text, username)
+			if msg := update.Message; msg != nil {
+				username := msg.From.UserName
+				if msg.IsCommand() {
+					cmd := msg.Command()
+					b.handler.HandleCommand(msg.Chat.ID, cmd, username)
+				} else {
+					b.handler.HandleMessage(msg.Chat.ID, msg.Text, username)
+				}
 			}
 		case <-ctx.Done():
 			log.Println("Context canceled, stopping bot")

@@ -69,6 +69,16 @@ func (db *DB) GetUser(chatID int64) (*User, error) {
 	return &user, err
 }
 
+func (db *DB) GetUserByUsername(username string) (*User, error) {
+	row := db.conn.QueryRow(`SELECT chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset FROM users WHERE username = ?`, username)
+	var user User
+	err := row.Scan(&user.ChatID, &user.Username, &user.WebCalURL, &user.DailyTime, &user.WeeklyTime, &user.ReminderOffset)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return &user, err
+}
+
 func (db *DB) SaveUser(user *User) error {
 	_, err := db.conn.Exec(`INSERT INTO users (chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset) 
 		VALUES (?, ?, ?, ?, ?, ?) 
@@ -99,4 +109,74 @@ func (db *DB) GetAllUsers() ([]*User, error) {
 		users = append(users, &user)
 	}
 	return users, nil
+}
+
+func (db *DB) AreFriends(userID1, userID2 int64) (bool, error) {
+	if userID1 > userID2 {
+		userID1, userID2 = userID2, userID1
+	}
+	row := db.conn.QueryRow(`SELECT 1 FROM friends WHERE user_id1 = ? AND user_id2 = ?`, userID1, userID2)
+	var exists int
+	err := row.Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (db *DB) FriendRequestExists(requestorID, requesteeID int64) (bool, error) {
+	row := db.conn.QueryRow(`SELECT 1 FROM friend_requests WHERE requestor_id = ? AND requestee_id = ?`, requestorID, requesteeID)
+	var exists int
+	err := row.Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (db *DB) AddFriendRequest(requestorID, requesteeID int64) error {
+	_, err := db.conn.Exec(`INSERT INTO friend_requests (requestor_id, requestee_id) VALUES (?, ?)`, requestorID, requesteeID)
+	return err
+}
+
+func (db *DB) AcceptFriendRequest(requestorID, requesteeID int64) error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	user1, user2 := requestorID, requesteeID
+	if user1 > user2 {
+		user1, user2 = user2, user1
+	}
+	_, err = tx.Exec(`INSERT INTO friends (user_id1, user_id2) VALUES (?, ?)`, user1, user2)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`DELETE FROM friend_requests WHERE requestor_id = ? AND requestee_id = ?`, requestorID, requesteeID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (db *DB) GetPendingFriendRequests(userID int64) ([]int64, error) {
+	rows, err := db.conn.Query(`SELECT requestor_id FROM friend_requests WHERE requestee_id = ?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var requestors []int64
+	for rows.Next() {
+		var requestorID int64
+		if err := rows.Scan(&requestorID); err != nil {
+			return nil, err
+		}
+		requestors = append(requestors, requestorID)
+	}
+	return requestors, nil
 }
