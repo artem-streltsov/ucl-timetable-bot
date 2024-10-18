@@ -81,3 +81,7 @@ func getWeekday(dayStr string) time.Weekday {
 		return time.Sunday
 	}
 }
+
+func EscapeUnderscores(s string) string {
+	return strings.ReplaceAll(s, "_", "\\_")
+}

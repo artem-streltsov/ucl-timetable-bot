@@ -296,7 +296,7 @@ func (h *Handler) handleAddFriend(user *database.User, text string) {
 	h.sendMessage(user.ChatID, "Request sent. Your friend now needs to add you with the /accept\\_friend command.")
 	h.clearUserState(user.ChatID)
 
-	h.sendMessage(friend.ChatID, fmt.Sprintf("@%s has sent you a friend request. Use /accept\\_friend to accept.", user.Username))
+	h.sendMessage(friend.ChatID, fmt.Sprintf("@%s has sent you a friend request. Use /accept\\_friend to accept.", utils.EscapeUnderscores(user.Username)))
 }
 
 func (h *Handler) handleAcceptFriend(user *database.User) {
@@ -376,8 +376,8 @@ func (h *Handler) HandleCallbackQuery(callback *tgbotapi.CallbackQuery) {
 			return
 		}
 
-		h.sendMessage(currentUser.ChatID, fmt.Sprintf("You are now friends with @%s!", requestor.Username))
-		h.sendMessage(requestor.ChatID, fmt.Sprintf("@%s has accepted your friend request!", currentUser.Username))
+		h.sendMessage(currentUser.ChatID, fmt.Sprintf("You are now friends with @%s!", utils.EscapeUnderscores(requestor.Username)))
+		h.sendMessage(requestor.ChatID, fmt.Sprintf("@%s has accepted your friend request!", utils.EscapeUnderscores(currentUser.Username)))
 	}
 }
 
