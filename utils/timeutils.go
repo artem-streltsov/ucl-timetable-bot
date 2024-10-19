@@ -9,9 +9,6 @@ import (
 var ukLocation, _ = time.LoadLocation("Europe/London")
 
 func IsValidOffset(offsetStr string) bool {
-	if len(offsetStr) != 2 {
-		return false
-	}
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
 		return false
@@ -80,8 +77,4 @@ func getWeekday(dayStr string) time.Weekday {
 	default:
 		return time.Sunday
 	}
-}
-
-func EscapeUnderscores(s string) string {
-	return strings.ReplaceAll(s, "_", "\\_")
 }

@@ -54,7 +54,6 @@ func (b *Bot) Run(ctx context.Context) error {
 			}
 			if cb := update.CallbackQuery; cb != nil {
 				b.handler.HandleCallbackQuery(cb)
-				return nil
 			}
 			if msg := update.Message; msg != nil {
 				username := msg.From.UserName

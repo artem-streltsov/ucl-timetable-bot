@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/artem-streltsov/ucl-timetable-bot/models"
+
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -12,15 +14,6 @@ import (
 
 type DB struct {
 	conn *sql.DB
-}
-
-type User struct {
-	ChatID         int64
-	Username       string
-	WebCalURL      string
-	DailyTime      string
-	WeeklyTime     string
-	ReminderOffset string
 }
 
 func New(dbPath string) (*DB, error) {
@@ -59,9 +52,9 @@ func (db *DB) Close() error {
 	return db.conn.Close()
 }
 
-func (db *DB) GetUser(chatID int64) (*User, error) {
+func (db *DB) GetUser(chatID int64) (*models.User, error) {
 	row := db.conn.QueryRow(`SELECT chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset FROM users WHERE chat_id = ?`, chatID)
-	var user User
+	var user models.User
 	err := row.Scan(&user.ChatID, &user.Username, &user.WebCalURL, &user.DailyTime, &user.WeeklyTime, &user.ReminderOffset)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -69,9 +62,9 @@ func (db *DB) GetUser(chatID int64) (*User, error) {
 	return &user, err
 }
 
-func (db *DB) GetUserByUsername(username string) (*User, error) {
+func (db *DB) GetUserByUsername(username string) (*models.User, error) {
 	row := db.conn.QueryRow(`SELECT chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset FROM users WHERE username = ?`, username)
-	var user User
+	var user models.User
 	err := row.Scan(&user.ChatID, &user.Username, &user.WebCalURL, &user.DailyTime, &user.WeeklyTime, &user.ReminderOffset)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -79,29 +72,29 @@ func (db *DB) GetUserByUsername(username string) (*User, error) {
 	return &user, err
 }
 
-func (db *DB) SaveUser(user *User) error {
+func (db *DB) SaveUser(user *models.User) error {
 	_, err := db.conn.Exec(`INSERT INTO users (chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset) 
-		VALUES (?, ?, ?, ?, ?, ?) 
-		ON CONFLICT(chat_id) DO UPDATE SET 
-			username=excluded.username, 
-			webcal_url=excluded.webcal_url, 
-			daily_time=excluded.daily_time, 
-			weekly_time=excluded.weekly_time,
+        VALUES (?, ?, ?, ?, ?, ?) 
+        ON CONFLICT(chat_id) DO UPDATE SET 
+            username=excluded.username, 
+            webcal_url=excluded.webcal_url, 
+            daily_time=excluded.daily_time, 
+            weekly_time=excluded.weekly_time,
             reminder_offset=excluded.reminder_offset`,
 		user.ChatID, user.Username, user.WebCalURL, user.DailyTime, user.WeeklyTime, user.ReminderOffset)
 	return err
 }
 
-func (db *DB) GetAllUsers() ([]*User, error) {
+func (db *DB) GetAllUsers() ([]*models.User, error) {
 	rows, err := db.conn.Query(`SELECT chat_id, username, webcal_url, daily_time, weekly_time, reminder_offset FROM users`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var users []*User
+	var users []*models.User
 	for rows.Next() {
-		var user User
+		var user models.User
 		err := rows.Scan(&user.ChatID, &user.Username, &user.WebCalURL, &user.DailyTime, &user.WeeklyTime, &user.ReminderOffset)
 		if err != nil {
 			return nil, err
