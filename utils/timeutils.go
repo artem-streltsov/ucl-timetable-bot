@@ -42,6 +42,11 @@ func GetNextTime(timeStr string) time.Time {
 	if nextTime.Before(now) {
 		nextTime = nextTime.Add(24 * time.Hour)
 	}
+	if nextTime.Weekday() == time.Saturday {
+		nextTime = nextTime.Add(2 * 24 * time.Hour)
+	} else if nextTime.Weekday() == time.Sunday {
+		nextTime = nextTime.Add(24 * time.Hour)
+	}
 	return nextTime
 }
 
