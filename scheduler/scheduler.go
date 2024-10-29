@@ -125,9 +125,9 @@ func (s *Scheduler) scheduleLectureReminders(chatID int64) {
 			duration := time.Until(reminderTime)
 			lectureCopy := lecture
 			timer := time.AfterFunc(duration, func() {
-				reminderMessage := fmt.Sprintf("⏰ *%s* in %d minutes at %s",
-					timetable.CleanTitle(lectureCopy.Title),
+				reminderMessage := fmt.Sprintf("⏰ In %d minutes\n📚 %s\n📍 %s",
 					offsetMinutes,
+					timetable.CleanTitle(lectureCopy.Title),
 					lectureCopy.Location,
 				)
 				s.sendMessage(chatID, reminderMessage)
